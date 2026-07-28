@@ -1,0 +1,1586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simple RAG — Learn by Doing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  /* ---------- تم و رنگ‌ها ---------- */
+  :root{
+    --bg:#0b0e14; --panel:#121724; --panel2:#171d2e; --border:#232c44;
+    --text:#e7ecf5; --muted:#8b96ad; --accent:#7c6cff; --accent2:#31d0aa;
+    --warn:#ffb454; --danger:#ff6b6b; --mono:'JetBrains Mono',monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);
+    min-height:100vh;
+    background-image:radial-gradient(ellipse 60% 40% at 70% -10%,rgba(124,108,255,.18),transparent),
+                     radial-gradient(ellipse 50% 35% at 10% 110%,rgba(49,208,170,.10),transparent);
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:28px 22px 60px}
+
+  /* ---------- هدر ---------- */
+  header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px}
+  .logo{display:flex;align-items:center;gap:12px}
+  .logo-badge{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;
+    background:linear-gradient(135deg,var(--accent),#4a3fd8);font-size:20px;box-shadow:0 6px 20px rgba(124,108,255,.35)}
+  h1{font-size:21px;font-weight:800;letter-spacing:-.02em}
+  .sub{color:var(--muted);font-size:12.5px;margin-top:2px}
+
+  /* ---------- نوار پایپ‌لاین ---------- */
+  .pipeline{display:flex;align-items:center;gap:6px;flex-wrap:wrap;background:var(--panel);
+    border:1px solid var(--border);border-radius:14px;padding:12px 14px;margin-bottom:20px}
+  .step{font-size:11.5px;font-weight:600;padding:5px 10px;border-radius:999px;
+    background:var(--panel2);border:1px solid var(--border);color:var(--muted);white-space:nowrap;transition:.25s}
+  .step.on{color:#fff;border-color:var(--accent);background:rgba(124,108,255,.16);
+    box-shadow:0 0 12px rgba(124,108,255,.35);animation:pulse 1.1s infinite}
+  @keyframes pulse{50%{box-shadow:0 0 20px rgba(124,108,255,.6)}}
+  .arrow{color:#3a4664;font-size:11px}
+
+  /* ---------- کارت‌های آمار ---------- */
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px}
+  .stat{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px 16px}
+  .stat .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
+  .stat .v{font-family:var(--mono);font-size:16px;font-weight:600;color:var(--accent2);word-break:break-all}
+  .stat .v.big{font-size:24px;color:#fff}
+
+  /* ---------- چیدمان دو ستونه ---------- */
+  .cols{display:grid;grid-template-columns:1fr 1.25fr;gap:20px}
+  @media(max-width:900px){.cols{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:22px}
+  .card h2{font-size:15px;font-weight:700;display:flex;align-items:center;gap:10px;margin-bottom:16px}
+  .num{width:24px;height:24px;border-radius:8px;background:linear-gradient(135deg,var(--accent),#4a3fd8);
+    display:grid;place-items:center;font-size:12px;font-weight:800}
+
+  /* ---------- آپلود ---------- */
+  .drop{border:1.5px dashed #33406a;border-radius:13px;padding:26px 16px;text-align:center;
+    cursor:pointer;transition:.2s;color:var(--muted);font-size:13px}
+  .drop:hover,.drop.over{border-color:var(--accent);background:rgba(124,108,255,.06);color:var(--text)}
+  .drop .icon{font-size:26px;margin-bottom:6px}
+  .filename{font-family:var(--mono);font-size:12px;color:var(--accent2);margin-top:8px;word-break:break-all}
+
+  label.lbl{display:block;font-size:12px;color:var(--muted);margin:16px 0 8px;font-weight:600}
+  .seg{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+  .seg button{padding:9px 6px;border-radius:10px;border:1px solid var(--border);background:var(--panel2);
+    color:var(--muted);font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;transition:.15s}
+  .seg button.sel{background:rgba(124,108,255,.18);border-color:var(--accent);color:#fff}
+  .hint{font-size:11.5px;color:var(--muted);margin-top:8px;line-height:1.5;min-height:34px}
+
+  .nums{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px}
+  .nums input{width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:10px;
+    color:var(--text);padding:9px 12px;font-family:var(--mono);font-size:13px}
+  .nums input:disabled{opacity:.35}
+  .nums span{display:block;font-size:10.5px;color:var(--muted);margin-bottom:5px}
+
+  .btn{width:100%;margin-top:18px;padding:12px;border:none;border-radius:12px;cursor:pointer;
+    font-family:inherit;font-size:14px;font-weight:700;color:#fff;transition:.2s;
+    background:linear-gradient(135deg,var(--accent),#4a3fd8);box-shadow:0 6px 18px rgba(124,108,255,.3)}
+  .btn:hover{transform:translateY(-1px)}
+  .btn:disabled{opacity:.45;cursor:wait;transform:none}
+  .btn.green{background:linear-gradient(135deg,#2bb896,#1d8a70);box-shadow:0 6px 18px rgba(49,208,170,.25)}
+
+  /* ---------- نتیجه آپلود ---------- */
+  .upres{margin-top:14px;display:none}
+  .chips{display:flex;flex-wrap:wrap;gap:7px}
+  .chip{font-family:var(--mono);font-size:11px;padding:5px 9px;border-radius:8px;
+    background:var(--panel2);border:1px solid var(--border);color:var(--muted)}
+  .chip b{color:var(--accent2);font-weight:600}
+
+  /* ---------- پرسش و پاسخ ---------- */
+  textarea{width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:12px;
+    color:var(--text);padding:13px 14px;font-family:inherit;font-size:14px;resize:vertical;min-height:74px}
+  textarea:focus,.nums input:focus{outline:none;border-color:var(--accent)}
+  .answer{display:none;margin-top:16px;background:linear-gradient(180deg,rgba(49,208,170,.07),transparent);
+    border:1px solid rgba(49,208,170,.3);border-radius:13px;padding:16px}
+  .answer h3{font-size:12px;color:var(--accent2);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px}
+  .answer p{font-size:14.5px;line-height:1.75;white-space:pre-wrap}
+
+  .qmetrics{display:none;flex-wrap:wrap;gap:7px;margin-top:12px}
+
+  .sources{margin-top:16px;display:none}
+  .sources h3{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px}
+  .src{background:var(--panel2);border:1px solid var(--border);border-radius:12px;margin-bottom:10px;overflow:hidden}
+  .src summary{display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer;list-style:none;flex-wrap:wrap}
+  .src summary::-webkit-details-marker{display:none}
+  .src .fname{font-family:var(--mono);font-size:12px;color:#fff;font-weight:600}
+  .src .cidx{font-size:10.5px;color:var(--muted)}
+  .scorebar{flex:1;min-width:90px;height:6px;border-radius:99px;background:#222b45;overflow:hidden}
+  .scorebar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--warn),var(--accent2))}
+  .scoreval{font-family:var(--mono);font-size:11.5px;color:var(--accent2);font-weight:600}
+  .src .txt{padding:0 14px 13px;font-size:12.5px;line-height:1.7;color:var(--muted);border-top:1px dashed var(--border);padding-top:11px;white-space:pre-wrap}
+
+  .error{display:none;margin-top:12px;background:rgba(255,107,107,.08);border:1px solid rgba(255,107,107,.35);
+    color:var(--danger);border-radius:10px;padding:10px 13px;font-size:12.5px}
+  .reset{background:none;border:1px solid var(--border);color:var(--muted);font-size:11.5px;
+    padding:6px 12px;border-radius:9px;cursor:pointer;font-family:inherit;transition:.15s}
+  .reset:hover{border-color:var(--danger);color:var(--danger)}
+  .spin{display:inline-block;width:13px;height:13px;border:2px solid rgba(255,255,255,.3);
+    border-top-color:#fff;border-radius:50%;animation:rot .7s linear infinite;vertical-align:-2px;margin-right:7px}
+  @keyframes rot{to{transform:rotate(360deg)}}
+
+  /* ---------- آزمایشگاه وکتور ---------- */
+  .lab-grid{display:grid;grid-template-columns:1fr 1.15fr;gap:26px}
+  @media(max-width:900px){.lab-grid{grid-template-columns:1fr}}
+  .labrow{margin-bottom:9px}
+  .labrow span{display:block;font-size:10.5px;color:var(--muted);margin-bottom:4px}
+  .labrow input{width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:10px;
+    color:var(--text);padding:9px 12px;font-size:13px;font-family:inherit}
+  .labrow input:focus{outline:none;border-color:var(--accent)}
+  .btn.small{width:auto;padding:9px 16px;font-size:12.5px;margin-top:6px}
+  .btn.small.gray{background:var(--panel2);border:1px solid var(--border);box-shadow:none;
+    color:var(--muted);font-weight:600;margin-top:0}
+  .btn.small.gray:hover{color:#fff;border-color:var(--accent);transform:none}
+  .mini{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px}
+  .note{font-size:11.5px;color:var(--muted);line-height:1.7;margin-top:10px}
+  canvas#cv{background:#0d1122;border:1px solid var(--border);border-radius:12px;
+    cursor:grab;touch-action:none;max-width:100%}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:11px;color:var(--muted)}
+  .legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+
+  /* ---------- بخش ۴: الگوریتم‌های ANN ---------- */
+  .algo-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+  @media(max-width:900px){.algo-grid{grid-template-columns:1fr}}
+  .algo{background:var(--panel2);border:1px solid var(--border);border-radius:13px;padding:16px}
+  .algo h4{font-size:13.5px;display:flex;align-items:center;gap:8px;margin-bottom:4px}
+  .algo .tag{font-size:9.5px;padding:3px 8px;border-radius:99px;background:rgba(124,108,255,.14);
+    color:var(--accent);border:1px solid rgba(124,108,255,.35);font-weight:600;letter-spacing:.05em;text-transform:uppercase}
+  .algo .oneliner{font-size:11.5px;color:var(--accent2);margin-bottom:6px;font-weight:600}
+  .algo svg{width:100%;height:auto;background:#0d1122;border:1px solid var(--border);border-radius:10px;margin:6px 0 8px}
+  .algo p{font-size:11.5px;color:var(--muted);line-height:1.65}
+  .algo .used{margin-top:8px;font-size:10.5px;color:var(--muted)}
+  .algo .used b{color:var(--text);font-weight:600}
+  .note code,.algo code{font-family:var(--mono);font-size:10.5px;background:var(--bg);
+    border:1px solid var(--border);border-radius:5px;padding:1px 5px;color:var(--accent2)}
+  .dashmove{stroke-dasharray:6 5;animation:dashm 1.2s linear infinite}
+  @keyframes dashm{to{stroke-dashoffset:-44}}
+  .pc{display:flex;flex-direction:column;gap:3px;font-size:11.5px;line-height:1.5;margin-top:2px}
+  .pc .y{color:var(--accent2)}
+  .pc .n{color:var(--danger)}
+
+  /* ---------- بخش ۶: بُعد امبدینگ ---------- */
+  .dims{display:flex;flex-direction:column;gap:11px;margin:16px 0}
+  .dimrow{display:grid;grid-template-columns:160px 1fr 175px;gap:12px;align-items:center}
+  @media(max-width:700px){.dimrow{grid-template-columns:95px 1fr}.dimmem{display:none}}
+  .dimlab b{font-family:var(--mono);font-size:15px;color:#fff}
+  .dimlab span{display:block;font-size:10px;color:var(--muted)}
+  .dimtrack{height:16px;background:var(--panel2);border:1px solid var(--border);border-radius:99px;overflow:hidden}
+  .dimtrack i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--accent),var(--accent2))}
+  .dimrow.you .dimtrack i{box-shadow:0 0 14px rgba(124,108,255,.6)}
+  .dimrow.you .dimlab b{color:var(--accent2)}
+  .dimmem{font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+  .tbl{width:100%;border-collapse:collapse;margin-top:8px;font-size:12px}
+  .tbl th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;
+    color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--border)}
+  .tbl td{padding:8px 10px;border-bottom:1px solid var(--border)}
+  .tbl td:first-child{font-family:var(--mono);color:var(--accent2);white-space:nowrap}
+  .tbl tr:last-child td{border-bottom:none}
+  .halo{animation:halo 1.6s ease-in-out infinite}
+  @keyframes halo{0%,100%{opacity:.12}50%{opacity:.5}}
+
+  /* ---------- مثال عددی تعاملی ---------- */
+  .wx-vecs{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:8px;margin:12px 0 14px}
+  .wxchip{background:var(--panel2);border:1px solid var(--border);border-radius:10px;
+    padding:9px 11px;font-size:10.5px;color:var(--muted);line-height:1.55}
+  .wxchip b{font-family:var(--mono);color:#fff;font-size:12px}
+  .wxchip .mean{display:block;margin-top:2px;color:var(--text)}
+  .wx-toggle{font-size:11.5px;color:var(--muted);display:inline-flex;align-items:center;gap:6px;
+    cursor:pointer;user-select:none}
+  .wx-toggle input{accent-color:var(--accent)}
+  .wxrow{display:grid;grid-template-columns:26px 175px 1fr 110px 60px;gap:10px;align-items:center;
+    background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:9px 12px;margin-bottom:7px}
+  @media(max-width:840px){.wxrow{grid-template-columns:26px 1fr 60px}.wxrow .wxcalc,.wxrow .scorebar{display:none}}
+  .wxrank{width:21px;height:21px;border-radius:7px;display:grid;place-items:center;font-size:11px;
+    font-family:var(--mono);color:var(--muted);border:1px solid var(--border)}
+  #wxtable .wxrow:first-child .wxrank{color:var(--accent2);border-color:var(--accent2)}
+  .wxid b{font-family:var(--mono);font-size:13px;color:#fff}
+  .wxid span{display:block;font-size:9.5px;color:var(--muted);line-height:1.35}
+  .wxcalc{font-family:var(--mono);font-size:10.5px;color:var(--muted);overflow-wrap:anywhere}
+  .wxcalc b{color:var(--accent2)}
+  .wxval{font-family:var(--mono);font-size:12.5px;color:var(--accent2);text-align:right}
+  .wxformula{margin-top:12px;background:var(--panel2);border:1px solid rgba(124,108,255,.35);border-radius:10px;
+    padding:11px 14px;font-family:var(--mono);font-size:13px;color:var(--text);text-align:center;overflow-x:auto}
+  .wxformula b{color:var(--accent);font-weight:600}
+
+  /* ---------- خط How + بخش‌های ۸ و ۹ ---------- */
+  .how{margin-top:8px;font-size:11px;color:var(--muted);line-height:1.6}
+  .how b{color:var(--accent);font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;margin-right:4px}
+  .mrow{font-size:11.5px;color:var(--muted);line-height:1.65;margin-top:7px}
+  .mrow b{display:block;color:var(--text);font-size:9.5px;text-transform:uppercase;letter-spacing:.07em;margin-bottom:1px}
+  .prob{background:var(--panel2);border:1px solid var(--border);border-radius:11px;margin-bottom:8px;overflow:hidden}
+  .prob summary{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;
+    list-style:none;font-size:12.5px;font-weight:600;flex-wrap:wrap}
+  .prob summary::-webkit-details-marker{display:none}
+  .pnum{min-width:22px;height:22px;border-radius:7px;background:var(--panel);border:1px solid var(--border);
+    display:grid;place-items:center;font-family:var(--mono);font-size:10.5px;color:var(--accent)}
+  .prob .tag{margin-left:auto}
+  .pbody{padding:10px 14px 12px;font-size:11.5px;color:var(--muted);line-height:1.7;border-top:1px dashed var(--border)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="logo">
+      <div class="logo-badge">📚</div>
+      <div>
+        <h1>Simple RAG</h1>
+        <div class="sub">PDF → Chunks → Embeddings → Pinecone → LLM · a learning project</div>
+      </div>
+    </div>
+    <button class="reset" onclick="resetIndex()">🗑 Clear index</button>
+  </header>
+
+  <!-- نوار پایپ‌لاین: هنگام اجرا، مرحله‌های فعال روشن می‌شوند -->
+  <div class="pipeline" id="pipeline">
+    <span class="step" data-g="up">📄 PDF Upload</span><span class="arrow">→</span>
+    <span class="step" data-g="up">Extract Text</span><span class="arrow">→</span>
+    <span class="step" data-g="up">Split into Chunks</span><span class="arrow">→</span>
+    <span class="step" data-g="up">Embedding Model</span><span class="arrow">→</span>
+    <span class="step" data-g="up">Pinecone DB</span><span class="arrow">→</span>
+    <span class="step" data-g="ask">❓ Question</span><span class="arrow">→</span>
+    <span class="step" data-g="ask">Question Embedding</span><span class="arrow">→</span>
+    <span class="step" data-g="ask">Top 3 Chunks</span><span class="arrow">→</span>
+    <span class="step" data-g="ask">LLM</span><span class="arrow">→</span>
+    <span class="step" data-g="ask">✅ Answer + Sources</span>
+  </div>
+
+  <!-- داشبورد شاخص‌های سیستم -->
+  <div class="stats">
+    <div class="stat"><div class="k">Vectors in DB</div><div class="v big" id="st-vectors">—</div></div>
+    <div class="stat"><div class="k">Dimension</div><div class="v big" id="st-dim">—</div></div>
+    <div class="stat"><div class="k">Index</div><div class="v" id="st-index">—</div></div>
+    <div class="stat"><div class="k">Embedding model</div><div class="v" id="st-emb">—</div></div>
+    <div class="stat"><div class="k">Chat model</div><div class="v" id="st-chat">—</div></div>
+  </div>
+
+  <div class="cols">
+    <!-- ستون ۱: آپلود و ایندکس -->
+    <div class="card">
+      <h2><span class="num">1</span> Upload &amp; Index</h2>
+
+      <div class="drop" id="drop" onclick="document.getElementById('file').click()">
+        <div class="icon">📎</div>
+        Drop a PDF here or <b>click to browse</b>
+        <div class="filename" id="fname"></div>
+      </div>
+      <input type="file" id="file" accept=".pdf" multiple hidden>
+
+      <label class="lbl">Chunking strategy</label>
+      <div class="seg" id="seg">
+        <button class="sel" data-s="fixed">Fixed size</button>
+        <button data-s="sentence">Sentence</button>
+        <button data-s="paragraph">Paragraph</button>
+      </div>
+      <div class="hint" id="hint"></div>
+
+      <div class="nums">
+        <div><span>Chunk size (chars)</span><input type="number" id="csize" value="800" min="100" step="50"></div>
+        <div><span>Overlap (chars)</span><input type="number" id="coverlap" value="150" min="0" step="25"></div>
+      </div>
+
+      <button class="btn" id="upbtn" onclick="uploadAll()">⬆ Upload &amp; Index</button>
+      <div class="error" id="uperr"></div>
+      <div class="upres" id="upres"></div>
+    </div>
+
+    <!-- ستون ۲: پرسش -->
+    <div class="card">
+      <h2><span class="num">2</span> Ask your PDFs</h2>
+      <textarea id="q" placeholder="Ask a question about your uploaded documents…"></textarea>
+      <button class="btn green" id="askbtn" onclick="ask()">✦ Ask</button>
+      <div class="error" id="askerr"></div>
+
+      <div class="answer" id="answer"><h3>Answer</h3><p id="answer-text" dir="auto"></p></div>
+      <div class="chips qmetrics" id="qmetrics"></div>
+      <div class="sources" id="sources"><h3>Sources (top 3 chunks)</h3><div id="srclist"></div></div>
+    </div>
+  </div>
+
+  <!-- بخش ۳: آزمایشگاه وکتور — نرم و متریک‌های شباهت -->
+  <div class="card" style="margin-top:20px">
+    <h2><span class="num">3</span> Vector Lab — norms &amp; similarity metrics</h2>
+    <div class="lab-grid">
+
+      <!-- الف) امبدینگ واقعی: آیا وکتور نرمال شده؟ -->
+      <div>
+        <label class="lbl" style="margin-top:0">Real embeddings — is the vector normalized?</label>
+        <div class="labrow"><span>Text A</span><input type="text" id="ta" value="The cat sat on the mat"></div>
+        <div class="labrow"><span>Text B</span><input type="text" id="tb" value="A kitten is sitting on the rug"></div>
+        <button class="btn small" id="labbtn" onclick="runLab()">⚗ Embed &amp; Compare</button>
+        <div class="error" id="laberr"></div>
+        <div id="labres" style="display:none">
+          <div class="mini" id="labchips"></div>
+          <div class="note" id="labnote"></div>
+        </div>
+      </div>
+
+      <!-- ب) هندسه دوبعدی: بکش و تفاوت متریک‌ها را ببین -->
+      <div>
+        <label class="lbl" style="margin-top:0">2D playground — drag the arrow tips</label>
+        <canvas id="cv"></canvas>
+        <div class="legend">
+          <span><i style="background:var(--accent)"></i> angle → cosine</span>
+          <span><i style="background:var(--accent2)"></i> projection of A on B → dot</span>
+          <span><i style="background:var(--warn)"></i> tip-to-tip → euclidean</span>
+        </div>
+        <div class="mini" id="geochips"></div>
+        <div class="mini">
+          <button class="btn small gray" onclick="normalizeAB()">Normalize |A|=|B|=1</button>
+          <button class="btn small gray" onclick="scaleB()">B × 1.5</button>
+          <button class="btn small gray" onclick="resetAB()">Reset</button>
+        </div>
+        <div class="note">Press <b>Normalize</b>: the angle (cosine) stays the same while dot &amp; euclidean
+          change — that is why cosine ignores vector length. Press <b>B × 1.5</b>: dot grows with length,
+          cosine does not move at all.</div>
+      </div>
+    </div>
+
+    <!-- مثال عددی تعاملی: ۴ chunk ذخیره‌شده + ۱ سؤال -->
+    <label class="lbl" style="margin-top:24px">Worked example — 4 stored chunks · 1 query · pick a metric, watch the ranking</label>
+    <p class="note" style="margin-top:2px">Toy 5-dimensional vectors — real embeddings have hundreds or thousands of
+      dimensions, but the math is <b>identical</b> to what Pinecone / FAISS does. Each vector is the embedding of one
+      chunk; the query is <i>"What are the conditions for ending the contract?"</i></p>
+
+    <div class="wx-vecs" id="wxvecs"></div>
+
+    <div class="mini" style="align-items:center;gap:14px">
+      <div class="seg" id="wxmetric" style="display:inline-grid;grid-template-columns:repeat(3,auto)">
+        <button class="sel" data-m="cosine">Cosine</button>
+        <button data-m="dot">Dot product</button>
+        <button data-m="euclid">Euclidean (L2)</button>
+      </div>
+      <label class="wx-toggle"><input type="checkbox" id="wxnorm"> Normalize first (‖x‖ = 1)</label>
+    </div>
+    <div class="wxformula" id="wxformula"></div>
+    <div class="note" id="wxhint" style="min-height:32px"></div>
+    <div id="wxtable" style="margin-top:6px"></div>
+    <div class="note" id="wxtopk"></div>
+  </div>
+
+  <!-- بخش ۴: باغ‌وحش ایندکس‌های ANN — چطور دیتابیس‌های وکتوری سریع می‌گردند -->
+  <div class="card" style="margin-top:20px">
+    <h2><span class="num">4</span> ANN Index Zoo — how vector DBs search fast</h2>
+    <p class="note" style="margin-top:0">Brute force over your current index is instant. But at <b>millions</b> of
+      vectors, comparing the query against every single vector (a <b>Flat</b> index) gets too slow. ANN
+      (Approximate Nearest Neighbor) indexes check a smart <i>subset</i> instead — slightly lower recall
+      (recall = share of true neighbors actually found) for 10–1000× more speed. Four big families:</p>
+
+    <div class="algo-grid">
+
+      <!-- ۱) IVF: خوشه‌بندی -->
+      <div class="algo">
+        <h4>IVF <span class="tag">clustering</span></h4>
+        <div class="oneliner">Cluster first — then search only the nearest cells.</div>
+        <svg viewBox="0 0 240 150" xmlns="http://www.w3.org/2000/svg">
+          <!-- سؤال بالا، سه سلول پایین — فقط نزدیک‌ترین سلول جستجو می‌شود -->
+          <circle cx="120" cy="20" r="9" fill="var(--accent)" class="halo"/>
+          <circle cx="120" cy="20" r="5" fill="var(--accent)"/>
+          <text x="134" y="24" font-size="9" fill="var(--accent)">query</text>
+          <line x1="120" y1="29" x2="120" y2="58" stroke="var(--accent)" stroke-width="2" class="dashmove"/>
+          <rect x="10" y="58" width="66" height="66" rx="12" fill="#171d2e" stroke="#2b3555"/>
+          <rect x="87" y="58" width="66" height="66" rx="12" fill="rgba(49,208,170,.10)" stroke="var(--accent2)" stroke-width="1.5"/>
+          <rect x="164" y="58" width="66" height="66" rx="12" fill="#171d2e" stroke="#2b3555"/>
+          <circle cx="43" cy="72" r="4" fill="none" stroke="#57627d" stroke-width="1.5"/>
+          <circle cx="120" cy="72" r="4" fill="none" stroke="var(--accent2)" stroke-width="1.5"/>
+          <circle cx="197" cy="72" r="4" fill="none" stroke="#57627d" stroke-width="1.5"/>
+          <g fill="#4a5570"><circle cx="30" cy="95" r="3.5"/><circle cx="50" cy="108" r="3.5"/><circle cx="60" cy="90" r="3.5"/></g>
+          <g fill="var(--accent2)"><circle cx="106" cy="95" r="3.5"/><circle cx="126" cy="108" r="3.5"/><circle cx="136" cy="90" r="3.5"/></g>
+          <g fill="#4a5570"><circle cx="184" cy="95" r="3.5"/><circle cx="204" cy="108" r="3.5"/><circle cx="214" cy="90" r="3.5"/></g>
+          <text x="22" y="140" font-size="9" fill="#57627d">skipped ✗</text>
+          <text x="94" y="140" font-size="9" fill="var(--accent2)">searched ✓</text>
+          <text x="176" y="140" font-size="9" fill="#57627d">skipped ✗</text>
+        </svg>
+        <p>k-means groups all vectors into cells around <b>centroids</b>. A query is compared with centroids
+          only, then searched inside the closest <b>nprobe</b> cells. Risk: a true neighbor hiding just
+          across a cell border.</p>
+        <div class="used">Used in: <b>FAISS</b> <code>IndexIVFFlat</code> · <b>Milvus</b></div>
+      </div>
+
+      <!-- ۲) HNSW: گراف چندلایه -->
+      <div class="algo">
+        <h4>HNSW <span class="tag">graph</span></h4>
+        <div class="oneliner">Multi-layer graph — long hops on top, precise steps below.</div>
+        <svg viewBox="0 0 240 150" xmlns="http://www.w3.org/2000/svg">
+          <!-- سه لایه، گره‌های کم، یک مسیر واضح -->
+          <rect x="15" y="12" width="210" height="34" rx="9" fill="rgba(124,108,255,.05)" stroke="#232c44"/>
+          <rect x="15" y="58" width="210" height="36" rx="9" fill="rgba(124,108,255,.05)" stroke="#232c44"/>
+          <rect x="15" y="106" width="210" height="36" rx="9" fill="rgba(124,108,255,.05)" stroke="#232c44"/>
+          <text x="22" y="26" font-size="8.5" fill="#57627d">top: long jumps</text>
+          <text x="22" y="120" font-size="8.5" fill="#57627d">bottom: fine steps</text>
+          <line x1="50" y1="33" x2="180" y2="33" stroke="#2b3555"/>
+          <line x1="40" y1="79" x2="120" y2="79" stroke="#2b3555"/><line x1="120" y1="79" x2="195" y2="79" stroke="#2b3555"/>
+          <line x1="30" y1="127" x2="75" y2="127" stroke="#2b3555"/><line x1="75" y1="127" x2="120" y2="127" stroke="#2b3555"/><line x1="120" y1="127" x2="165" y2="127" stroke="#2b3555"/><line x1="165" y1="127" x2="205" y2="127" stroke="#2b3555"/>
+          <polyline points="50,33 180,33 195,79 165,127" fill="none" stroke="var(--accent)" stroke-width="2.5" class="dashmove"/>
+          <g fill="#4a5570"><circle cx="40" cy="79" r="4"/><circle cx="120" cy="79" r="4"/><circle cx="30" cy="127" r="4"/><circle cx="75" cy="127" r="4"/><circle cx="120" cy="127" r="4"/><circle cx="205" cy="127" r="4"/></g>
+          <g fill="#6b7a9c"><circle cx="180" cy="33" r="4"/><circle cx="195" cy="79" r="4"/></g>
+          <circle cx="50" cy="33" r="5.5" fill="var(--accent)"/>
+          <text x="40" y="45" font-size="9" fill="var(--accent)">start</text>
+          <circle cx="165" cy="127" r="10" fill="var(--accent2)" class="halo"/>
+          <circle cx="165" cy="127" r="5.5" fill="var(--accent2)"/>
+          <text x="180" y="141" font-size="9" fill="var(--accent2)">target</text>
+        </svg>
+        <p>Top layers are sparse highways: each greedy hop jumps far. Drop a layer, repeat, and land in the
+          true neighborhood at layer 0. Excellent speed &amp; recall — but the whole graph lives in <b>RAM</b>.</p>
+        <div class="used">Used in: <b>Pinecone</b>-style DBs · <b>Qdrant</b> · <b>pgvector</b> · <b>FAISS</b> <code>IndexHNSWFlat</code></div>
+      </div>
+
+      <!-- ۳) DiskANN: گراف روی دیسک -->
+      <div class="algo">
+        <h4>DiskANN <span class="tag">graph + disk</span></h4>
+        <div class="oneliner">Graph search that lives on SSD, not RAM.</div>
+        <svg viewBox="0 0 240 150" xmlns="http://www.w3.org/2000/svg">
+          <!-- دو جعبه بزرگ: RAM (کپی فشرده) و SSD (وکتور کامل) -->
+          <circle cx="18" cy="14" r="5" fill="var(--accent)"/>
+          <text x="27" y="18" font-size="9" fill="var(--accent)">query</text>
+          <line x1="20" y1="19" x2="38" y2="34" stroke="var(--accent)" stroke-width="2" class="dashmove"/>
+          <rect x="12" y="34" width="88" height="96" rx="12" fill="rgba(124,108,255,.06)" stroke="var(--accent)"/>
+          <text x="38" y="52" font-size="11" font-weight="800" fill="var(--accent)">RAM</text>
+          <text x="22" y="66" font-size="8.5" fill="#8b96ad">compressed copies</text>
+          <g fill="#5a4fd0"><rect x="30" y="76" width="12" height="12" rx="2"/><rect x="58" y="76" width="12" height="12" rx="2"/><rect x="30" y="98" width="12" height="12" rx="2"/><rect x="58" y="98" width="12" height="12" rx="2"/></g>
+          <rect x="128" y="24" width="102" height="106" rx="12" fill="none" stroke="#2b3555"/>
+          <text x="166" y="42" font-size="11" font-weight="800" fill="#8b96ad">SSD</text>
+          <text x="146" y="56" font-size="8.5" fill="#57627d">full vectors</text>
+          <g stroke="#2b3555"><line x1="150" y1="78" x2="182" y2="70"/><line x1="182" y1="70" x2="210" y2="84"/><line x1="150" y1="78" x2="162" y2="104"/><line x1="162" y1="104" x2="196" y2="110"/></g>
+          <g fill="#4a5570"><circle cx="150" cy="78" r="4.5"/><circle cx="210" cy="84" r="4.5"/><circle cx="162" cy="104" r="4.5"/></g>
+          <circle cx="182" cy="70" r="5" fill="var(--accent2)"/>
+          <circle cx="196" cy="110" r="5" fill="var(--accent2)"/>
+          <line x1="100" y1="80" x2="176" y2="71" stroke="var(--accent2)" stroke-width="2" class="dashmove"/>
+          <line x1="100" y1="100" x2="190" y2="108" stroke="var(--accent2)" stroke-width="2" class="dashmove"/>
+          <text x="130" y="146" font-size="8.5" fill="var(--accent2)">fetch only 2 from disk</text>
+        </svg>
+        <p>Keeps only <b>compressed (PQ)</b> codes in RAM to steer the graph walk; full vectors sit on disk
+          and just a handful get read per query. Billion-scale search on one machine — a Microsoft design.</p>
+        <div class="used">Used in: <b>Azure AI Search</b> · <b>Milvus</b></div>
+      </div>
+
+      <!-- ۴) درخت‌ها: تقسیم فضا -->
+      <div class="algo">
+        <h4>Tree-based <span class="tag">space partition</span></h4>
+        <div class="oneliner">Cut space in half, again and again — like 20 Questions.</div>
+        <svg viewBox="0 0 240 150" xmlns="http://www.w3.org/2000/svg">
+          <!-- فضا با دو برش به سلول‌ها تقسیم می‌شود؛ سؤال در یک سلول کوچک می‌افتد -->
+          <rect x="30" y="14" width="180" height="112" fill="none" stroke="#2b3555"/>
+          <rect x="120" y="14" width="90" height="56" fill="rgba(49,208,170,.08)" stroke="rgba(49,208,170,.35)"/>
+          <line x1="120" y1="14" x2="120" y2="126" stroke="#57627d" stroke-width="1.5"/>
+          <line x1="120" y1="70" x2="210" y2="70" stroke="#57627d" stroke-width="1.5"/>
+          <text x="96" y="10" font-size="8.5" fill="#8b96ad">cut 1</text>
+          <text x="213" y="74" font-size="8.5" fill="#8b96ad">cut 2</text>
+          <g fill="#4a5570"><circle cx="60" cy="45" r="4"/><circle cx="90" cy="80" r="4"/><circle cx="65" cy="108" r="4"/><circle cx="150" cy="95" r="4"/><circle cx="185" cy="110" r="4"/></g>
+          <g fill="var(--accent2)"><circle cx="145" cy="35" r="4"/><circle cx="180" cy="52" r="4"/></g>
+          <circle cx="165" cy="40" r="10" fill="var(--accent)" class="halo"/>
+          <circle cx="165" cy="40" r="5.5" fill="var(--accent)"/>
+          <text x="34" y="143" font-size="8.5" fill="#57627d">query lands in one small cell → search only its points (+ neighbors)</text>
+        </svg>
+        <p>KD-trees route a query down the splits into a small leaf, then check nearby leaves. Great in low
+          dimensions, weak at 1536-d (<b>curse of dimensionality</b>) — Annoy compensates with a forest of
+          random trees.</p>
+        <div class="used">Used in: <b>Annoy</b> (Spotify) · <b>scikit-learn</b> KD/Ball-Tree</div>
+      </div>
+    </div>
+
+    <p class="note" style="margin-top:14px">Pinecone picks and tunes the index for you behind the API. In FAISS
+      you choose yourself — start exact, upgrade when it gets slow:
+      <code>IndexFlatIP</code> → <code>IndexIVFFlat</code> → <code>IndexHNSWFlat</code>.</p>
+  </div>
+
+  <!-- بخش ۵: باغ‌وحش chunking — چهار خانواده تکه‌تکه کردن متن -->
+  <div class="card" style="margin-top:20px">
+    <h2><span class="num">5</span> Chunking Zoo — four ways to split a document</h2>
+    <p class="note" style="margin-top:0">Before embedding, text must be split. How you split decides what the
+      retriever can ever find — <b>a chunk is the atom of retrieval</b>. Four families, from dumb to smart:</p>
+
+    <div class="algo-grid">
+
+      <!-- ۱) Fixed-size -->
+      <div class="algo">
+        <h4>Fixed-size <span class="tag">baseline</span></h4>
+        <div class="oneliner">Cut every N characters, add overlap.</div>
+        <svg viewBox="0 0 240 150" xmlns="http://www.w3.org/2000/svg">
+          <!-- نوار متن با «کلمه‌ها» -->
+          <rect x="10" y="22" width="220" height="13" rx="3" fill="#232c44"/>
+          <g fill="#3a4664"><rect x="14" y="26.5" width="12" height="4" rx="2"/><rect x="30" y="26.5" width="9" height="4" rx="2"/><rect x="43" y="26.5" width="14" height="4" rx="2"/><rect x="61" y="26.5" width="8" height="4" rx="2"/><rect x="73" y="26.5" width="11" height="4" rx="2"/><rect x="88" y="26.5" width="15" height="4" rx="2"/><rect x="107" y="26.5" width="9" height="4" rx="2"/><rect x="120" y="26.5" width="13" height="4" rx="2"/><rect x="137" y="26.5" width="8" height="4" rx="2"/><rect x="149" y="26.5" width="12" height="4" rx="2"/><rect x="165" y="26.5" width="10" height="4" rx="2"/><rect x="179" y="26.5" width="14" height="4" rx="2"/><rect x="197" y="26.5" width="9" height="4" rx="2"/><rect x="210" y="26.5" width="13" height="4" rx="2"/></g>
+          <!-- یک جمله که از وسط بریده می‌شود -->
+          <path d="M78,40 Q99,46 120,40" fill="none" stroke="var(--warn)" stroke-width="1.5"/>
+          <text x="124" y="44" font-size="7" fill="var(--warn)">one sentence</text>
+          <!-- خطوط برش -->
+          <line x1="95" y1="14" x2="95" y2="100" stroke="#ff6b6b" stroke-width="1" stroke-dasharray="4 3"/>
+          <line x1="165" y1="14" x2="165" y2="100" stroke="#ff6b6b" stroke-width="1" stroke-dasharray="4 3"/>
+          <text x="89" y="12" font-size="8" fill="#ff6b6b">✂</text>
+          <text x="159" y="12" font-size="8" fill="#ff6b6b">✂</text>
+          <text x="99" y="52" font-size="7" fill="#ff6b6b">cut mid-sentence!</text>
+          <!-- تکه‌ها با همپوشانی -->
+          <rect x="10" y="58" width="85" height="18" rx="4" fill="rgba(124,108,255,.15)" stroke="rgba(124,108,255,.5)"/>
+          <rect x="80" y="58" width="85" height="18" rx="4" fill="rgba(49,208,170,.15)" stroke="rgba(49,208,170,.5)"/>
+          <rect x="150" y="58" width="80" height="18" rx="4" fill="rgba(255,180,84,.15)" stroke="rgba(255,180,84,.5)"/>
+          <text x="34" y="70" font-size="7.5" fill="var(--accent)">chunk 1</text>
+          <text x="108" y="70" font-size="7.5" fill="var(--accent2)">chunk 2</text>
+          <text x="178" y="70" font-size="7.5" fill="var(--warn)">chunk 3</text>
+          <line x1="80" y1="82" x2="95" y2="82" stroke="#8b96ad" stroke-width="2"/>
+          <text x="66" y="94" font-size="7" fill="#8b96ad">overlap</text>
+          <line x1="10" y1="106" x2="95" y2="106" stroke="#57627d" stroke-width="1"/>
+          <text x="30" y="117" font-size="7" fill="#57627d">size = 800 chars</text>
+          <text x="10" y="138" font-size="7.5" fill="#57627d">every chunk exactly the same length, meaning ignored</text>
+        </svg>
+        <div class="pc">
+          <span class="y">✓ Dead simple, fast, predictable chunk count &amp; size</span>
+          <span class="y">✓ Works on any text — no assumptions needed</span>
+          <span class="n">✗ Blindly cuts sentences and ideas in the middle</span>
+          <span class="n">✗ Ignores structure; overlap only patches the damage</span>
+        </div>
+        <div class="how"><b>How</b> slide a window over the text: <code>text[i : i+size]</code>, step = size − overlap,
+          repeat to the end — exactly <code>chunk_fixed()</code> in app.py.</div>
+        <div class="used">In this project: the <b>Fixed size</b> mode</div>
+      </div>
+
+      <!-- ۲) Recursive / structure-aware -->
+      <div class="algo">
+        <h4>Recursive <span class="tag">structure-aware</span></h4>
+        <div class="oneliner">Try big separators first — fall back gracefully.</div>
+        <svg viewBox="0 0 240 150" xmlns="http://www.w3.org/2000/svg">
+          <rect x="10" y="10" width="220" height="24" rx="4" fill="#232c44" stroke="#2b3555"/>
+          <text x="95" y="25" font-size="8" fill="#8b96ad">document</text>
+          <g stroke="#2b3555" stroke-width="1"><line x1="42" y1="34" x2="42" y2="54"/><line x1="129" y1="34" x2="129" y2="54"/><line x1="207" y1="34" x2="207" y2="54"/></g>
+          <text x="12" y="48" font-size="7" fill="#57627d">1) split by paragraphs (\n\n)</text>
+          <rect x="10" y="54" width="64" height="20" rx="4" fill="rgba(124,108,255,.15)" stroke="rgba(124,108,255,.5)"/>
+          <rect x="80" y="54" width="98" height="20" rx="4" fill="rgba(255,107,107,.10)" stroke="#ff6b6b" stroke-dasharray="4 3"/>
+          <text x="106" y="67" font-size="7" fill="#ff6b6b">too big!</text>
+          <rect x="184" y="54" width="46" height="20" rx="4" fill="rgba(124,108,255,.15)" stroke="rgba(124,108,255,.5)"/>
+          <g stroke="#2b3555" stroke-width="1"><line x1="110" y1="74" x2="103" y2="94"/><line x1="150" y1="74" x2="155" y2="94"/></g>
+          <g stroke="#232c44" stroke-width="1"><line x1="42" y1="74" x2="42" y2="94"/><line x1="207" y1="74" x2="207" y2="94"/></g>
+          <text x="12" y="88" font-size="7" fill="#57627d">2) still too big → split by sentences (.)</text>
+          <rect x="10" y="94" width="64" height="20" rx="4" fill="rgba(124,108,255,.15)" stroke="rgba(124,108,255,.5)"/>
+          <rect x="80" y="94" width="46" height="20" rx="4" fill="rgba(49,208,170,.15)" stroke="rgba(49,208,170,.5)"/>
+          <rect x="132" y="94" width="46" height="20" rx="4" fill="rgba(49,208,170,.15)" stroke="rgba(49,208,170,.5)"/>
+          <rect x="184" y="94" width="46" height="20" rx="4" fill="rgba(124,108,255,.15)" stroke="rgba(124,108,255,.5)"/>
+          <text x="60" y="132" font-size="7.5" fill="var(--accent2)">all pieces ≤ chunk size ✓ boundaries stay natural</text>
+        </svg>
+        <div class="pc">
+          <span class="y">✓ Respects natural boundaries whenever possible (¶ → sentence → word)</span>
+          <span class="y">✓ The industry default — LangChain's <code>RecursiveCharacterTextSplitter</code></span>
+          <span class="n">✗ Still size-driven: related paragraphs can get separated</span>
+          <span class="n">✗ Fragile on PDFs that lose their line breaks during extraction</span>
+        </div>
+        <div class="how"><b>How</b> split on <code>\n\n</code> first; any piece still over the limit → split by
+          <code>\n</code>, then <code>". "</code>, then space — recurse until every piece fits.</div>
+        <div class="used">In this project: <b>Sentence</b> &amp; <b>Paragraph</b> modes are simple cousins of this</div>
+      </div>
+
+      <!-- ۳) Semantic -->
+      <div class="algo">
+        <h4>Semantic <span class="tag">meaning-based</span></h4>
+        <div class="oneliner">Embed sentences — cut where the topic changes.</div>
+        <svg viewBox="0 0 240 150" xmlns="http://www.w3.org/2000/svg">
+          <text x="24" y="16" font-size="7" fill="var(--accent2)">topic A</text>
+          <text x="158" y="16" font-size="7" fill="var(--warn)">topic B</text>
+          <g>
+            <rect x="12" y="22" width="30" height="14" rx="3" fill="rgba(49,208,170,.25)" stroke="var(--accent2)"/>
+            <rect x="46" y="22" width="30" height="14" rx="3" fill="rgba(49,208,170,.25)" stroke="var(--accent2)"/>
+            <rect x="80" y="22" width="30" height="14" rx="3" fill="rgba(49,208,170,.25)" stroke="var(--accent2)"/>
+            <rect x="114" y="22" width="30" height="14" rx="3" fill="rgba(255,180,84,.25)" stroke="var(--warn)"/>
+            <rect x="148" y="22" width="30" height="14" rx="3" fill="rgba(255,180,84,.25)" stroke="var(--warn)"/>
+            <rect x="182" y="22" width="30" height="14" rx="3" fill="rgba(255,180,84,.25)" stroke="var(--warn)"/>
+          </g>
+          <!-- منحنی شباهت جمله‌های همسایه -->
+          <line x1="30" y1="110" x2="210" y2="110" stroke="#232c44"/>
+          <polyline points="44,68 78,64 112,102 146,66 180,62" fill="none" stroke="var(--accent)" stroke-width="1.5"/>
+          <g fill="var(--accent)"><circle cx="44" cy="68" r="2.5"/><circle cx="78" cy="64" r="2.5"/><circle cx="146" cy="66" r="2.5"/><circle cx="180" cy="62" r="2.5"/></g>
+          <circle cx="112" cy="102" r="3.5" fill="#ff6b6b"/>
+          <line x1="112" y1="14" x2="112" y2="115" stroke="#ff6b6b" stroke-width="1" stroke-dasharray="4 3"/>
+          <text x="104" y="12" font-size="8" fill="#ff6b6b">✂</text>
+          <text x="66" y="124" font-size="7" fill="#ff6b6b">similarity dips = topic change → cut here</text>
+          <rect x="12" y="130" width="98" height="12" rx="3" fill="rgba(49,208,170,.1)" stroke="var(--accent2)"/>
+          <rect x="116" y="130" width="96" height="12" rx="3" fill="rgba(255,180,84,.1)" stroke="var(--warn)"/>
+          <text x="42" y="139" font-size="7" fill="var(--accent2)">chunk 1</text>
+          <text x="146" y="139" font-size="7" fill="var(--warn)">chunk 2</text>
+        </svg>
+        <div class="pc">
+          <span class="y">✓ Boundaries follow <b>meaning</b> — chunks are self-contained ideas</span>
+          <span class="y">✓ Shines on messy prose with no clean structure</span>
+          <span class="n">✗ Pays embedding calls at indexing time (slower, costs $)</span>
+          <span class="n">✗ Needs threshold tuning; chunk sizes vary wildly</span>
+        </div>
+        <div class="how"><b>How</b> split into sentences → embed each one → compute cosine of every neighbor pair →
+          cut where similarity drops below a threshold (e.g. mean − 1·std) → merge the runs between cuts.</div>
+        <div class="used">Used in: LangChain <code>SemanticChunker</code> · LlamaIndex</div>
+      </div>
+
+      <!-- ۴) Document-specific -->
+      <div class="algo">
+        <h4>Document-specific <span class="tag">format-aware</span></h4>
+        <div class="oneliner">Use the format's own structure as the knife.</div>
+        <svg viewBox="0 0 240 150" xmlns="http://www.w3.org/2000/svg">
+          <!-- Markdown: برش روی هدرها -->
+          <rect x="12" y="18" width="64" height="112" rx="4" fill="none" stroke="#2b3555"/>
+          <rect x="18" y="26" width="28" height="4" rx="2" fill="var(--accent)"/>
+          <g fill="#3a4664"><rect x="18" y="36" width="50" height="3" rx="1.5"/><rect x="18" y="43" width="44" height="3" rx="1.5"/><rect x="18" y="50" width="48" height="3" rx="1.5"/></g>
+          <line x1="14" y1="58" x2="74" y2="58" stroke="var(--accent)" stroke-dasharray="3 3" stroke-width="1"/>
+          <rect x="18" y="66" width="34" height="4" rx="2" fill="var(--accent)"/>
+          <g fill="#3a4664"><rect x="18" y="76" width="50" height="3" rx="1.5"/><rect x="18" y="83" width="40" height="3" rx="1.5"/></g>
+          <line x1="14" y1="91" x2="74" y2="91" stroke="var(--accent)" stroke-dasharray="3 3" stroke-width="1"/>
+          <rect x="18" y="99" width="24" height="4" rx="2" fill="var(--accent)"/>
+          <g fill="#3a4664"><rect x="18" y="109" width="46" height="3" rx="1.5"/><rect x="18" y="116" width="50" height="3" rx="1.5"/></g>
+          <text x="14" y="142" font-size="6.5" fill="#57627d">Markdown · # headers</text>
+          <!-- کد: برش روی توابع -->
+          <rect x="88" y="18" width="64" height="112" rx="4" fill="none" stroke="#2b3555"/>
+          <rect x="94" y="26" width="12" height="4" rx="2" fill="var(--accent2)"/>
+          <g fill="#3a4664"><rect x="102" y="34" width="40" height="3" rx="1.5"/><rect x="102" y="41" width="34" height="3" rx="1.5"/><rect x="102" y="48" width="38" height="3" rx="1.5"/></g>
+          <line x1="90" y1="56" x2="150" y2="56" stroke="var(--accent2)" stroke-dasharray="3 3" stroke-width="1"/>
+          <rect x="94" y="64" width="12" height="4" rx="2" fill="var(--accent2)"/>
+          <g fill="#3a4664"><rect x="102" y="72" width="42" height="3" rx="1.5"/><rect x="102" y="79" width="30" height="3" rx="1.5"/><rect x="102" y="86" width="36" height="3" rx="1.5"/></g>
+          <line x1="90" y1="94" x2="150" y2="94" stroke="var(--accent2)" stroke-dasharray="3 3" stroke-width="1"/>
+          <rect x="94" y="102" width="12" height="4" rx="2" fill="var(--accent2)"/>
+          <g fill="#3a4664"><rect x="102" y="110" width="38" height="3" rx="1.5"/><rect x="102" y="117" width="42" height="3" rx="1.5"/></g>
+          <text x="92" y="142" font-size="6.5" fill="#57627d">Code · def / class</text>
+          <!-- جدول: برش روی گروه ردیف‌ها -->
+          <rect x="164" y="18" width="64" height="112" rx="4" fill="none" stroke="#2b3555"/>
+          <rect x="164" y="18" width="64" height="12" rx="4" fill="rgba(124,108,255,.15)"/>
+          <g stroke="#232c44" stroke-width="1">
+            <line x1="185" y1="18" x2="185" y2="130"/><line x1="206" y1="18" x2="206" y2="130"/>
+            <line x1="164" y1="42" x2="228" y2="42"/><line x1="164" y1="66" x2="228" y2="66"/>
+            <line x1="164" y1="78" x2="228" y2="78"/><line x1="164" y1="102" x2="228" y2="102"/><line x1="164" y1="114" x2="228" y2="114"/>
+          </g>
+          <line x1="164" y1="54" x2="228" y2="54" stroke="var(--warn)" stroke-dasharray="3 3" stroke-width="1"/>
+          <line x1="164" y1="90" x2="228" y2="90" stroke="var(--warn)" stroke-dasharray="3 3" stroke-width="1"/>
+          <text x="166" y="142" font-size="6.5" fill="#57627d">Table · row groups</text>
+        </svg>
+        <div class="pc">
+          <span class="y">✓ Best chunks when the format is known — a section, a function, a row group</span>
+          <span class="y">✓ Each chunk is a logically <b>complete</b> unit</span>
+          <span class="n">✗ One parser per format — doesn't generalize to arbitrary text</span>
+          <span class="n">✗ Huge sections still need a fallback splitter inside</span>
+        </div>
+        <div class="how"><b>How</b> parse the format first (Markdown headings, code AST via tree-sitter, HTML DOM) →
+          emit one chunk per section / function / row group → store the heading path in metadata.</div>
+        <div class="used">Used in: <code>MarkdownHeaderTextSplitter</code> · AST code splitters · unstructured.io</div>
+      </div>
+    </div>
+
+    <p class="note" style="margin-top:14px">No universal winner. Rule of thumb: start <b>recursive</b>; if retrieval
+      quality disappoints, try <b>semantic</b>; when you control the format, go <b>document-specific</b>.
+      Chunking is the highest-leverage knob in RAG — bad chunks cannot be fixed by a better LLM.</p>
+  </div>
+
+  <!-- بخش ۶: بُعد امبدینگ — بردار معنا چقدر بزرگ است؟ -->
+  <div class="card" style="margin-top:20px">
+    <h2><span class="num">6</span> Embedding Dimensions — how big is a meaning-vector?</h2>
+    <p class="note" style="margin-top:0">An embedding is just a list of numbers; <b>dimension</b> = how many numbers.
+      Each number is one axis of "meaning space". Common sizes below — memory assumes float32
+      (4 bytes per number):</p>
+
+    <div class="dims">
+      <div class="dimrow">
+        <div class="dimlab"><b>384</b><span>all-MiniLM-L6-v2 (sentence-transformers)</span></div>
+        <div class="dimtrack"><i style="width:12.5%"></i></div>
+        <div class="dimmem">1.5 KB/vector · 1.5 GB per 1M</div>
+      </div>
+      <div class="dimrow">
+        <div class="dimlab"><b>768</b><span>BERT-base · nomic-embed</span></div>
+        <div class="dimtrack"><i style="width:25%"></i></div>
+        <div class="dimmem">3 KB/vector · 3 GB per 1M</div>
+      </div>
+      <div class="dimrow you">
+        <div class="dimlab"><b>1536</b><span style="color:var(--accent2)">text-embedding-3-small ← your model</span></div>
+        <div class="dimtrack"><i style="width:50%"></i></div>
+        <div class="dimmem">6 KB/vector · 6 GB per 1M</div>
+      </div>
+      <div class="dimrow">
+        <div class="dimlab"><b>3072</b><span>text-embedding-3-large</span></div>
+        <div class="dimtrack"><i style="width:100%"></i></div>
+        <div class="dimmem">12 KB/vector · 12 GB per 1M</div>
+      </div>
+    </div>
+
+    <table class="tbl">
+      <tr><th>Dimension</th><th>What it means</th></tr>
+      <tr><td>384</td><td>a vector of 384 numbers — light and fast</td></tr>
+      <tr><td>768</td><td>a vector of 768 numbers — the classic BERT size</td></tr>
+      <tr><td>1536</td><td>a vector of 1536 numbers — what this project stores in Pinecone (see the Dimension card on the dashboard)</td></tr>
+      <tr><td>More ↑</td><td>richer semantic space to separate subtle meanings — but linearly more memory, storage cost, and search time</td></tr>
+      <tr><td>Fewer ↓</td><td>lighter and faster — <b>not automatically better or worse</b>; quality comes from training, not raw size</td></tr>
+    </table>
+
+    <p class="note" style="margin-top:12px">Two practical facts: <b>(1)</b> a 384-d model can beat a 1536-d model on
+      real retrieval — always check benchmarks (MTEB leaderboard) instead of trusting size.
+      <b>(2)</b> OpenAI's v3 models are <b>Matryoshka</b>-trained: pass <code>dimensions=512</code> to the API and
+      you get the first 512 numbers with most of the quality kept — the early axes carry the most meaning.</p>
+  </div>
+
+  <!-- بخش ۷: جستجوی هیبریدی — Fusion و Reranking -->
+  <div class="card" style="margin-top:20px">
+    <h2><span class="num">7</span> Hybrid Search — Fusion &amp; Reranking</h2>
+    <p class="note" style="margin-top:0">This project is vector-only. Production RAG usually runs <b>two</b> retrievers
+      in parallel — vector search (meaning) and BM25 (exact keywords, names, codes) — which produces two ranked
+      lists. <b>Fusion</b> merges them into one list. A <b>reranker</b> then polishes the final order. Two classic
+      fusion methods:</p>
+
+    <div class="algo-grid">
+
+      <!-- ۱) Weighted Score Fusion -->
+      <div class="algo">
+        <h4>Weighted Score Fusion <span class="tag">score-based</span></h4>
+        <div class="oneliner">Normalize both scores, then blend with a weight α.</div>
+        <svg viewBox="0 0 240 150" xmlns="http://www.w3.org/2000/svg">
+          <text x="10" y="22" font-size="7" fill="var(--accent)">vector (cosine)</text>
+          <g font-size="7" font-family="monospace">
+            <rect x="10" y="27" width="64" height="12" rx="3" fill="rgba(124,108,255,.12)" stroke="rgba(124,108,255,.5)"/><text x="16" y="36" fill="#c9c2ff">A · 0.92</text>
+            <rect x="10" y="42" width="64" height="12" rx="3" fill="rgba(124,108,255,.12)" stroke="rgba(124,108,255,.5)"/><text x="16" y="51" fill="#c9c2ff">C · 0.85</text>
+            <rect x="10" y="57" width="64" height="12" rx="3" fill="rgba(124,108,255,.12)" stroke="rgba(124,108,255,.5)"/><text x="16" y="66" fill="#c9c2ff">B · 0.70</text>
+          </g>
+          <text x="10" y="88" font-size="7" fill="var(--accent2)">keyword (BM25)</text>
+          <g font-size="7" font-family="monospace">
+            <rect x="10" y="93" width="64" height="12" rx="3" fill="rgba(49,208,170,.10)" stroke="rgba(49,208,170,.5)"/><text x="16" y="102" fill="#9fe8d6">C · 0.88</text>
+            <rect x="10" y="108" width="64" height="12" rx="3" fill="rgba(49,208,170,.10)" stroke="rgba(49,208,170,.5)"/><text x="16" y="117" fill="#9fe8d6">D · 0.80</text>
+            <rect x="10" y="123" width="64" height="12" rx="3" fill="rgba(49,208,170,.10)" stroke="rgba(49,208,170,.5)"/><text x="16" y="132" fill="#9fe8d6">A · 0.45</text>
+          </g>
+          <line x1="76" y1="50" x2="92" y2="70" stroke="#57627d" stroke-width="1.2" class="dashmove"/>
+          <line x1="76" y1="112" x2="92" y2="86" stroke="#57627d" stroke-width="1.2" class="dashmove"/>
+          <rect x="92" y="58" width="74" height="38" rx="6" fill="rgba(124,108,255,.08)" stroke="var(--accent)"/>
+          <text x="99" y="73" font-size="7" font-family="monospace" fill="#e7ecf5">score = 0.6·vec</text>
+          <text x="110" y="86" font-size="7" font-family="monospace" fill="#e7ecf5">+ 0.4·bm25</text>
+          <text x="88" y="108" font-size="6.5" fill="var(--warn)">⚠ min-max normalize first!</text>
+          <line x1="166" y1="77" x2="176" y2="77" stroke="var(--accent)" stroke-width="1.5" class="dashmove"/>
+          <text x="178" y="36" font-size="7" fill="#8b96ad">fused</text>
+          <g font-size="7" font-family="monospace">
+            <rect x="178" y="40" width="54" height="12" rx="3" fill="rgba(49,208,170,.15)" stroke="var(--accent2)" stroke-width="1.5"/><text x="184" y="49" fill="var(--accent2)">C  0.86</text>
+            <rect x="178" y="55" width="54" height="12" rx="3" fill="#171d2e" stroke="#2b3555"/><text x="184" y="64" fill="#8b96ad">A  0.73</text>
+            <rect x="178" y="70" width="54" height="12" rx="3" fill="#171d2e" stroke="#2b3555"/><text x="184" y="79" fill="#8b96ad">B  0.42</text>
+            <rect x="178" y="85" width="54" height="12" rx="3" fill="#171d2e" stroke="#2b3555"/><text x="184" y="94" fill="#8b96ad">D  0.32</text>
+          </g>
+          <text x="172" y="112" font-size="6.5" fill="var(--accent2)">C is in both lists → wins</text>
+          <text x="10" y="146" font-size="7" fill="#57627d">α = 0.6 is a knob you must tune on real queries</text>
+        </svg>
+        <div class="pc">
+          <span class="y">✓ Fully tunable: α says how much you trust each retriever</span>
+          <span class="y">✓ Keeps score magnitude information</span>
+          <span class="n">✗ Cosine (0–1) and BM25 (unbounded) live on different scales → normalization is mandatory and fragile</span>
+          <span class="n">✗ Best α differs per dataset; needs evaluation queries</span>
+        </div>
+        <div class="used">Used in: <b>Weaviate</b> hybrid (alpha) · <b>Elasticsearch</b></div>
+      </div>
+
+      <!-- ۲) RRF -->
+      <div class="algo">
+        <h4>Reciprocal Rank Fusion <span class="tag">rank-based</span></h4>
+        <div class="oneliner">Ignore scores completely — sum 1/(k+rank) across lists.</div>
+        <svg viewBox="0 0 240 150" xmlns="http://www.w3.org/2000/svg">
+          <text x="10" y="22" font-size="7" fill="var(--accent)">vector — ranks only</text>
+          <g font-size="7" font-family="monospace">
+            <rect x="10" y="27" width="58" height="12" rx="3" fill="rgba(124,108,255,.12)" stroke="rgba(124,108,255,.5)"/><text x="16" y="36" fill="#c9c2ff">1 · A</text>
+            <rect x="10" y="42" width="58" height="12" rx="3" fill="rgba(124,108,255,.12)" stroke="rgba(124,108,255,.5)"/><text x="16" y="51" fill="#c9c2ff">2 · C</text>
+            <rect x="10" y="57" width="58" height="12" rx="3" fill="rgba(124,108,255,.12)" stroke="rgba(124,108,255,.5)"/><text x="16" y="66" fill="#c9c2ff">3 · B</text>
+          </g>
+          <text x="10" y="88" font-size="7" fill="var(--accent2)">BM25 — ranks only</text>
+          <g font-size="7" font-family="monospace">
+            <rect x="10" y="93" width="58" height="12" rx="3" fill="rgba(49,208,170,.10)" stroke="rgba(49,208,170,.5)"/><text x="16" y="102" fill="#9fe8d6">1 · C</text>
+            <rect x="10" y="108" width="58" height="12" rx="3" fill="rgba(49,208,170,.10)" stroke="rgba(49,208,170,.5)"/><text x="16" y="117" fill="#9fe8d6">2 · D</text>
+            <rect x="10" y="123" width="58" height="12" rx="3" fill="rgba(49,208,170,.10)" stroke="rgba(49,208,170,.5)"/><text x="16" y="132" fill="#9fe8d6">3 · A</text>
+          </g>
+          <line x1="70" y1="50" x2="86" y2="70" stroke="#57627d" stroke-width="1.2" class="dashmove"/>
+          <line x1="70" y1="112" x2="86" y2="86" stroke="#57627d" stroke-width="1.2" class="dashmove"/>
+          <rect x="86" y="60" width="64" height="34" rx="6" fill="rgba(124,108,255,.08)" stroke="var(--accent)"/>
+          <text x="94" y="74" font-size="7" fill="#e7ecf5">RRF score =</text>
+          <text x="93" y="87" font-size="8" font-family="monospace" fill="var(--accent)">Σ 1/(60+r)</text>
+          <line x1="150" y1="77" x2="160" y2="77" stroke="var(--accent)" stroke-width="1.5" class="dashmove"/>
+          <text x="164" y="36" font-size="7" fill="#8b96ad">fused (rank sums)</text>
+          <g font-size="6.8" font-family="monospace">
+            <text x="164" y="50" fill="var(--accent2)">C  1/62+1/61 = .0325 ←</text>
+            <text x="164" y="64" fill="#8b96ad">A  1/61+1/63 = .0323</text>
+            <text x="164" y="78" fill="#8b96ad">D  1/62      = .0161</text>
+            <text x="164" y="92" fill="#8b96ad">B  1/63      = .0159</text>
+          </g>
+          <text x="164" y="110" font-size="6.5" fill="var(--accent2)">appearing in BOTH lists beats</text>
+          <text x="164" y="119" font-size="6.5" fill="var(--accent2)">one high rank (C &gt; A)</text>
+          <text x="10" y="146" font-size="7" fill="#57627d">k = 60 softens the power of rank #1 — no normalization needed</text>
+        </svg>
+        <div class="pc">
+          <span class="y">✓ No score normalization — works across ANY retrievers out of the box</span>
+          <span class="y">✓ Robust industry default (one magic k≈60, rarely tuned)</span>
+          <span class="n">✗ Throws away score magnitudes — a 0.99 match and a 0.60 match at rank 1 look identical</span>
+          <span class="n">✗ Less controllable than a tuned α</span>
+        </div>
+        <div class="used">Used in: <b>Elasticsearch</b> RRF · <b>Azure AI Search</b> · <b>OpenSearch</b></div>
+      </div>
+    </div>
+
+    <!-- Fusion در برابر Reranking: جای هر کدام در پایپ‌لاین -->
+    <label class="lbl" style="margin-top:20px">Fusion vs Reranking — different jobs, different places</label>
+    <svg viewBox="0 0 700 170" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;background:#0d1122;border:1px solid var(--border);border-radius:12px;margin-top:8px">
+      <circle cx="28" cy="85" r="9" fill="var(--accent)" class="halo"/>
+      <circle cx="28" cy="85" r="5" fill="var(--accent)"/>
+      <text x="12" y="108" font-size="8" fill="var(--accent)">query</text>
+      <line x1="33" y1="80" x2="60" y2="48" stroke="#57627d" stroke-width="1.2" class="dashmove"/>
+      <line x1="33" y1="90" x2="60" y2="122" stroke="#57627d" stroke-width="1.2" class="dashmove"/>
+      <rect x="60" y="30" width="100" height="32" rx="8" fill="#171d2e" stroke="#2b3555"/>
+      <text x="76" y="49" font-size="9" fill="#e7ecf5">Vector search</text>
+      <rect x="60" y="108" width="100" height="32" rx="8" fill="#171d2e" stroke="#2b3555"/>
+      <text x="88" y="127" font-size="9" fill="#e7ecf5">BM25</text>
+      <line x1="160" y1="46" x2="230" y2="76" stroke="#57627d" stroke-width="1.2" class="dashmove"/>
+      <line x1="160" y1="124" x2="230" y2="94" stroke="#57627d" stroke-width="1.2" class="dashmove"/>
+      <text x="176" y="52" font-size="7" fill="#57627d">list 1</text>
+      <text x="176" y="122" font-size="7" fill="#57627d">list 2</text>
+      <rect x="230" y="60" width="120" height="50" rx="10" fill="rgba(124,108,255,.08)" stroke="var(--accent)" stroke-width="1.5"/>
+      <text x="262" y="82" font-size="11" font-weight="800" fill="var(--accent)">FUSION</text>
+      <text x="243" y="98" font-size="7" fill="#8b96ad">merge lists · pure math · ~0 ms</text>
+      <line x1="350" y1="85" x2="420" y2="85" stroke="var(--accent)" stroke-width="1.5" class="dashmove"/>
+      <text x="368" y="78" font-size="8" fill="#8b96ad">top 20</text>
+      <rect x="420" y="60" width="150" height="50" rx="10" fill="rgba(49,208,170,.07)" stroke="var(--accent2)" stroke-width="1.5"/>
+      <text x="455" y="80" font-size="11" font-weight="800" fill="var(--accent2)">RERANKER</text>
+      <text x="428" y="93" font-size="6.5" fill="#8b96ad">cross-encoder reads every</text>
+      <text x="428" y="102" font-size="6.5" fill="#8b96ad">(query + chunk) pair · smart, slow</text>
+      <line x1="570" y1="85" x2="622" y2="85" stroke="var(--accent2)" stroke-width="1.5" class="dashmove"/>
+      <text x="583" y="78" font-size="8" fill="#8b96ad">top 3</text>
+      <rect x="622" y="62" width="62" height="46" rx="10" fill="rgba(255,180,84,.07)" stroke="var(--warn)" stroke-width="1.5"/>
+      <text x="639" y="89" font-size="11" font-weight="800" fill="var(--warn)">LLM</text>
+      <text x="234" y="128" font-size="7.5" fill="var(--accent)">many lists → one list</text>
+      <text x="424" y="128" font-size="7.5" fill="var(--accent2)">one list → smarter order (model call per pair)</text>
+    </svg>
+
+    <table class="tbl">
+      <tr><th></th><th>Fusion</th><th>Reranking</th></tr>
+      <tr><td>Combines</td><td>multiple ranked lists (vector + BM25)</td><td>nothing — re-scores one candidate list</td></tr>
+      <tr><td>How</td><td>arithmetic on scores or ranks</td><td>a neural cross-encoder reads query + chunk together</td></tr>
+      <tr><td>Cost</td><td>microseconds, free</td><td>a model call per candidate — slower, costs $</td></tr>
+      <tr><td>Place</td><td>right after the retrievers</td><td>after fusion, right before the LLM</td></tr>
+    </table>
+
+    <p class="note" style="margin-top:12px">Rule of thumb: <b>RRF</b> is the safe default (nothing to normalize);
+      switch to <b>weighted fusion</b> only when you have evaluation queries to tune α on. And in most RAG stacks
+      the single biggest quality jump comes from adding a <b>reranker</b> (Cohere Rerank, BGE-reranker) — because a
+      cross-encoder actually <i>reads</i> the chunk next to the question instead of comparing frozen vectors.</p>
+  </div>
+
+  <!-- بخش ۸: متریک‌های کیفیت RAG -->
+  <div class="card" style="margin-top:20px">
+    <h2><span class="num">8</span> RAG Quality Metrics — measure before you tune</h2>
+    <p class="note" style="margin-top:0">You cannot improve what you do not measure. Build a tiny <b>eval set</b>
+      (30–50 pairs of <i>question → the chunk that answers it</i>, from your own PDFs) and re-run it after every
+      change. The metrics, grouped by pipeline stage:</p>
+
+    <div class="algo-grid">
+
+      <div class="algo">
+        <h4>Recall@k <span class="tag">retrieval</span></h4>
+        <div class="oneliner">Was the needed chunk retrieved at all?</div>
+        <svg viewBox="0 0 240 105" xmlns="http://www.w3.org/2000/svg">
+          <g font-size="14" text-anchor="middle">
+            <rect x="21" y="10" width="26" height="26" rx="6" fill="rgba(49,208,170,.12)" stroke="var(--accent2)"/><text x="34" y="29" fill="var(--accent2)">✓</text>
+            <rect x="64" y="10" width="26" height="26" rx="6" fill="rgba(49,208,170,.12)" stroke="var(--accent2)"/><text x="77" y="29" fill="var(--accent2)">✓</text>
+            <rect x="107" y="10" width="26" height="26" rx="6" fill="rgba(49,208,170,.12)" stroke="var(--accent2)"/><text x="120" y="29" fill="var(--accent2)">✓</text>
+            <rect x="150" y="10" width="26" height="26" rx="6" fill="rgba(255,107,107,.10)" stroke="var(--danger)"/><text x="163" y="29" fill="var(--danger)">✗</text>
+            <rect x="193" y="10" width="26" height="26" rx="6" fill="rgba(49,208,170,.12)" stroke="var(--accent2)"/><text x="206" y="29" fill="var(--accent2)">✓</text>
+          </g>
+          <text x="120" y="56" text-anchor="middle" font-size="8.5" fill="#8b96ad">5 eval questions · gold chunk found in top-k for 4 → recall = 0.80</text>
+          <rect x="10" y="72" width="154" height="10" rx="3" fill="rgba(255,107,107,.30)"/>
+          <rect x="164" y="72" width="44" height="10" fill="rgba(255,180,84,.30)"/>
+          <rect x="208" y="72" width="22" height="10" rx="3" fill="rgba(49,208,170,.40)"/>
+          <path d="M186,70 l-5,-8 h10 z" fill="#fff"/>
+          <text x="10" y="98" font-size="8" fill="#57627d">0</text>
+          <text x="155" y="98" font-size="8" fill="var(--danger)">0.7</text>
+          <text x="201" y="98" font-size="8" fill="var(--accent2)">0.9</text>
+          <text x="224" y="98" font-size="8" fill="#57627d">1</text>
+        </svg>
+        <div class="mrow"><b>Measure</b> for each eval question, check whether its gold chunk appears in the top-k results; recall = share of questions where it does.</div>
+        <div class="mrow"><b>Good / Bad</b> ≥ 0.90 healthy · &lt; 0.70 broken — the LLM can never use context it never received. Recall is the ceiling of your whole system.</div>
+        <div class="mrow"><b>Improve</b> fix chunk boundaries, raise k, hybrid search (BM25 + vector), stronger embedding model.</div>
+      </div>
+
+      <div class="algo">
+        <h4>Context Precision <span class="tag">retrieval</span></h4>
+        <div class="oneliner">Of the k chunks sent to the LLM, how many are actually relevant?</div>
+        <svg viewBox="0 0 240 105" xmlns="http://www.w3.org/2000/svg">
+          <g font-size="8.5" text-anchor="middle">
+            <rect x="20" y="12" width="58" height="24" rx="6" fill="rgba(49,208,170,.12)" stroke="var(--accent2)"/><text x="49" y="27" fill="var(--accent2)">relevant ✓</text>
+            <rect x="91" y="12" width="58" height="24" rx="6" fill="rgba(49,208,170,.12)" stroke="var(--accent2)"/><text x="120" y="27" fill="var(--accent2)">relevant ✓</text>
+            <rect x="162" y="12" width="58" height="24" rx="6" fill="rgba(255,107,107,.10)" stroke="var(--danger)"/><text x="191" y="27" fill="var(--danger)">noise ✗</text>
+          </g>
+          <text x="120" y="56" text-anchor="middle" font-size="8.5" fill="#8b96ad">k = 3 sent to the LLM · 2 relevant → precision = 0.67</text>
+          <rect x="10" y="72" width="110" height="10" rx="3" fill="rgba(255,107,107,.30)"/>
+          <rect x="120" y="72" width="44" height="10" fill="rgba(255,180,84,.30)"/>
+          <rect x="164" y="72" width="66" height="10" rx="3" fill="rgba(49,208,170,.40)"/>
+          <path d="M157,70 l-5,-8 h10 z" fill="#fff"/>
+          <text x="10" y="98" font-size="8" fill="#57627d">0</text>
+          <text x="112" y="98" font-size="8" fill="var(--danger)">0.5</text>
+          <text x="156" y="98" font-size="8" fill="var(--accent2)">0.7</text>
+          <text x="224" y="98" font-size="8" fill="#57627d">1</text>
+        </svg>
+        <div class="mrow"><b>Measure</b> judge each retrieved chunk relevant / irrelevant (human or LLM-as-judge); precision = relevant ÷ k.</div>
+        <div class="mrow"><b>Good / Bad</b> ≥ 0.7 good · &lt; 0.5 the context is mostly noise — irrelevant chunks actively mislead the LLM and waste tokens.</div>
+        <div class="mrow"><b>Improve</b> add a reranker, lower k, metadata filters, drop tiny junk chunks.</div>
+      </div>
+
+      <div class="algo">
+        <h4>MRR <span class="tag">retrieval</span></h4>
+        <div class="oneliner">How high does the first correct chunk rank?</div>
+        <svg viewBox="0 0 240 105" xmlns="http://www.w3.org/2000/svg">
+          <g font-size="9">
+            <rect x="16" y="8" width="112" height="15" rx="4" fill="#171d2e" stroke="#2b3555"/><text x="24" y="19" fill="#57627d">1</text><text x="40" y="19" fill="#57627d">wrong chunk</text>
+            <rect x="16" y="28" width="112" height="15" rx="4" fill="rgba(49,208,170,.12)" stroke="var(--accent2)"/><text x="24" y="39" fill="var(--accent2)">2</text><text x="40" y="39" fill="var(--accent2)">correct ✓</text>
+            <rect x="16" y="48" width="112" height="15" rx="4" fill="#171d2e" stroke="#2b3555"/><text x="24" y="59" fill="#57627d">3</text><text x="40" y="59" fill="#57627d">wrong chunk</text>
+          </g>
+          <text x="142" y="32" font-size="8.5" fill="#8b96ad">first correct at rank 2</text>
+          <text x="142" y="45" font-size="9" fill="#fff">→ 1/2 = 0.50</text>
+          <rect x="10" y="72" width="110" height="10" rx="3" fill="rgba(255,107,107,.30)"/>
+          <rect x="120" y="72" width="66" height="10" fill="rgba(255,180,84,.30)"/>
+          <rect x="186" y="72" width="44" height="10" rx="3" fill="rgba(49,208,170,.40)"/>
+          <path d="M120,70 l-5,-8 h10 z" fill="#fff"/>
+          <text x="10" y="98" font-size="8" fill="#57627d">0</text>
+          <text x="112" y="98" font-size="8" fill="var(--danger)">0.5</text>
+          <text x="178" y="98" font-size="8" fill="var(--accent2)">0.8</text>
+          <text x="224" y="98" font-size="8" fill="#57627d">1</text>
+        </svg>
+        <div class="mrow"><b>Measure</b> per question take 1/rank of the first correct chunk (1st → 1.0, 2nd → 0.5, 3rd → 0.33); average over the eval set.</div>
+        <div class="mrow"><b>Good / Bad</b> ≥ 0.8 great · &lt; 0.5 the right chunk exists but sits too deep for a top-3 pipeline to use.</div>
+        <div class="mrow"><b>Improve</b> reranking, better chunking, query rewriting.</div>
+      </div>
+
+      <div class="algo">
+        <h4>Faithfulness <span class="tag">generation</span></h4>
+        <div class="oneliner">Is every claim in the answer supported by the sources?</div>
+        <svg viewBox="0 0 240 105" xmlns="http://www.w3.org/2000/svg">
+          <rect x="10" y="8" width="104" height="52" rx="8" fill="#171d2e" stroke="#2b3555"/>
+          <text x="18" y="20" font-size="8" fill="#8b96ad">answer claims:</text>
+          <rect x="18" y="25" width="70" height="8" rx="3" fill="rgba(49,208,170,.35)"/>
+          <rect x="18" y="37" width="80" height="8" rx="3" fill="rgba(49,208,170,.35)"/>
+          <rect x="18" y="49" width="60" height="8" rx="3" fill="rgba(255,107,107,.45)"/>
+          <rect x="150" y="14" width="80" height="40" rx="8" fill="rgba(124,108,255,.07)" stroke="var(--accent)"/>
+          <text x="168" y="37" font-size="9" fill="var(--accent)">sources</text>
+          <line x1="90" y1="29" x2="150" y2="26" stroke="var(--accent2)" stroke-width="1.5"/>
+          <line x1="100" y1="41" x2="150" y2="38" stroke="var(--accent2)" stroke-width="1.5"/>
+          <line x1="80" y1="53" x2="124" y2="60" stroke="var(--danger)" stroke-width="1.5" stroke-dasharray="4 3"/>
+          <text x="128" y="66" font-size="8.5" fill="var(--danger)">✗ unsupported = hallucination</text>
+          <rect x="10" y="72" width="176" height="10" rx="3" fill="rgba(255,107,107,.30)"/>
+          <rect x="186" y="72" width="22" height="10" fill="rgba(255,180,84,.30)"/>
+          <rect x="208" y="72" width="22" height="10" rx="3" fill="rgba(49,208,170,.40)"/>
+          <path d="M157,70 l-5,-8 h10 z" fill="#fff"/>
+          <text x="10" y="98" font-size="8" fill="#57627d">0</text>
+          <text x="178" y="98" font-size="8" fill="var(--danger)">0.8</text>
+          <text x="202" y="98" font-size="8" fill="var(--accent2)">0.9</text>
+          <text x="224" y="98" font-size="8" fill="#57627d">1</text>
+        </svg>
+        <div class="mrow"><b>Measure</b> LLM-as-judge (e.g. RAGAS): split the answer into atomic claims, verify each one against the retrieved context; score = supported ÷ total.</div>
+        <div class="mrow"><b>Good / Bad</b> ≥ 0.9 required · &lt; 0.8 the model is inventing facts — hallucination, the #1 RAG sin.</div>
+        <div class="mrow"><b>Improve</b> stricter "only from sources / say I don't know" prompt, better context precision (reranker), require inline citations.</div>
+      </div>
+
+      <div class="algo">
+        <h4>Answer Relevance <span class="tag">generation</span></h4>
+        <div class="oneliner">Does the answer actually address the question?</div>
+        <svg viewBox="0 0 240 105" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="55" cy="32" r="18" fill="rgba(124,108,255,.12)" stroke="var(--accent)"/>
+          <text x="55" y="36" text-anchor="middle" font-size="11" fill="var(--accent)">Q</text>
+          <circle cx="165" cy="32" r="18" fill="rgba(49,208,170,.10)" stroke="var(--accent2)"/>
+          <text x="165" y="36" text-anchor="middle" font-size="11" fill="var(--accent2)">A</text>
+          <line x1="73" y1="32" x2="147" y2="32" stroke="#57627d" stroke-dasharray="4 3"/>
+          <text x="110" y="25" text-anchor="middle" font-size="9" fill="#fff">cos(Q, A) = 0.84</text>
+          <text x="120" y="60" text-anchor="middle" font-size="8.5" fill="#8b96ad">embed both — does the answer point the same way as the question?</text>
+          <rect x="10" y="72" width="132" height="10" rx="3" fill="rgba(255,107,107,.30)"/>
+          <rect x="142" y="72" width="44" height="10" fill="rgba(255,180,84,.30)"/>
+          <rect x="186" y="72" width="44" height="10" rx="3" fill="rgba(49,208,170,.40)"/>
+          <path d="M195,70 l-5,-8 h10 z" fill="#fff"/>
+          <text x="10" y="98" font-size="8" fill="#57627d">0</text>
+          <text x="134" y="98" font-size="8" fill="var(--danger)">0.6</text>
+          <text x="178" y="98" font-size="8" fill="var(--accent2)">0.8</text>
+          <text x="224" y="98" font-size="8" fill="#57627d">1</text>
+        </svg>
+        <div class="mrow"><b>Measure</b> LLM-judge rating, or a cheap proxy: cosine(embed(question), embed(answer)).</div>
+        <div class="mrow"><b>Good / Bad</b> ≥ 0.8 fine · low = fluent but off-topic answers — usually a retrieval problem wearing a generation mask.</div>
+        <div class="mrow"><b>Improve</b> better retrieval, restate the question in the prompt, query rewriting.</div>
+      </div>
+
+      <div class="algo">
+        <h4>Latency p50 / p95 <span class="tag">system</span></h4>
+        <div class="oneliner">How long until the user sees an answer?</div>
+        <svg viewBox="0 0 240 105" xmlns="http://www.w3.org/2000/svg">
+          <text x="10" y="16" font-size="8" fill="var(--accent)">embed</text>
+          <text x="34" y="16" font-size="8" fill="var(--accent2)">search</text>
+          <text x="110" y="16" font-size="8" fill="var(--warn)">LLM</text>
+          <rect x="10" y="22" width="17" height="16" rx="3" fill="var(--accent)"/>
+          <rect x="27" y="22" width="45" height="16" fill="var(--accent2)"/>
+          <rect x="72" y="22" width="139" height="16" rx="3" fill="var(--warn)"/>
+          <text x="214" y="34" font-size="8.5" fill="#fff">2.7s</text>
+          <text x="120" y="58" text-anchor="middle" font-size="8.5" fill="#8b96ad">224 + 603 + 1875 ms — LLM generation dominates, optimize there first</text>
+          <rect x="10" y="72" width="44" height="10" rx="3" fill="rgba(49,208,170,.40)"/>
+          <rect x="54" y="72" width="103" height="10" fill="rgba(255,180,84,.30)"/>
+          <rect x="157" y="72" width="73" height="10" rx="3" fill="rgba(255,107,107,.30)"/>
+          <path d="M50,70 l-5,-8 h10 z" fill="#fff"/>
+          <text x="10" y="98" font-size="8" fill="#57627d">0</text>
+          <text x="48" y="98" font-size="8" fill="var(--accent2)">3s</text>
+          <text x="148" y="98" font-size="8" fill="var(--danger)">10s</text>
+          <text x="220" y="98" font-size="8" fill="#57627d">15s</text>
+        </svg>
+        <div class="mrow"><b>Measure</b> log total ms per query — this app already shows embed / search / LLM ms on every question. Track p95 (the slow tail), not just the average.</div>
+        <div class="mrow"><b>Good / Bad</b> &lt; 3 s feels instant · &gt; 10 s users leave. LLM generation almost always dominates (you saw 1875 of 2704 ms).</div>
+        <div class="mrow"><b>Improve</b> stream tokens, smaller chat model, fewer / shorter chunks, cache repeated questions.</div>
+      </div>
+
+      <div class="algo">
+        <h4>Cost per query <span class="tag">system</span></h4>
+        <div class="oneliner">Tokens × price, for every answered question.</div>
+        <svg viewBox="0 0 240 105" xmlns="http://www.w3.org/2000/svg">
+          <text x="12" y="14" font-size="8" fill="#57627d">$ / query</text>
+          <line x1="10" y1="64" x2="230" y2="64" stroke="#232c44"/>
+          <polyline points="15,44 50,40 85,22 120,18 155,46 190,50 225,52" fill="none" stroke="var(--warn)" stroke-width="1.8"/>
+          <circle cx="120" cy="18" r="3.5" fill="var(--danger)"/>
+          <text x="118" y="11" text-anchor="middle" font-size="8" fill="var(--danger)">context bloat</text>
+          <circle cx="190" cy="50" r="3.5" fill="var(--accent2)"/>
+          <text x="190" y="80" text-anchor="middle" font-size="8" fill="var(--accent2)">trimmed to 3 good chunks</text>
+          <text x="120" y="99" text-anchor="middle" font-size="8.5" fill="#8b96ad">no magic number — watch the trend after every change</text>
+        </svg>
+        <div class="mrow"><b>Measure</b> sum embedding + prompt + completion tokens from the API responses; multiply by model rates.</div>
+        <div class="mrow"><b>Good / Bad</b> no universal number — watch the trend. Context bloat (sending 10 chunks when 3 suffice) is the classic leak.</div>
+        <div class="mrow"><b>Improve</b> higher precision (3 good chunks &gt; 10 mediocre), cheaper models, Matryoshka dimensions, caching.</div>
+      </div>
+
+      <div class="algo">
+        <h4>Top similarity score <span class="tag">health signal</span></h4>
+        <div class="oneliner">The best cosine score per query — your live warning light.</div>
+        <svg viewBox="0 0 240 105" xmlns="http://www.w3.org/2000/svg">
+          <text x="12" y="14" font-size="8" fill="#57627d">top score per query</text>
+          <rect x="10" y="54" width="220" height="16" fill="rgba(255,107,107,.10)"/>
+          <line x1="10" y1="54" x2="230" y2="54" stroke="var(--danger)" stroke-dasharray="4 3"/>
+          <text x="196" y="50" font-size="8" fill="var(--danger)">alarm &lt; 0.3</text>
+          <polyline points="15,42 57,40 99,45 141,41 183,58 225,56" fill="none" stroke="var(--accent)" stroke-width="1.8"/>
+          <g fill="var(--accent2)"><circle cx="15" cy="42" r="2.5"/><circle cx="57" cy="40" r="2.5"/><circle cx="99" cy="45" r="2.5"/><circle cx="141" cy="41" r="2.5"/></g>
+          <g fill="var(--danger)"><circle cx="183" cy="58" r="3"/><circle cx="225" cy="56" r="3"/></g>
+          <text x="188" y="82" text-anchor="middle" font-size="8" fill="var(--danger)">⚠ mismatch!</text>
+          <text x="120" y="99" text-anchor="middle" font-size="8.5" fill="#8b96ad">0.4–0.6 is normal — a dive under 0.3 means query/document mismatch</text>
+        </svg>
+        <div class="mrow"><b>Measure</b> already on your dashboard: the "top score" chip after every question.</div>
+        <div class="mrow"><b>Good / Bad</b> the absolute number means little (0.4–0.6 is normal), but <i>consistently</i> &lt; 0.3 = query/document mismatch: wrong embedding model, garbage extraction, or wrong language.</div>
+        <div class="mrow"><b>Improve</b> check PDF extraction quality, chunking, and that the embedding model fits your language and domain.</div>
+      </div>
+    </div>
+
+    <p class="note" style="margin-top:14px">Frameworks that automate these: <b>RAGAS</b>, <b>TruLens</b>,
+      <b>LangSmith / Langfuse</b>. Golden rule: change <b>one</b> thing (chunk size, k, model), re-run the same
+      eval set, compare the numbers — that loop <i>is</i> RAG engineering.</p>
+  </div>
+
+  <!-- بخش ۹: عیب‌یابی — ۱۵ مشکل رایج -->
+  <div class="card" style="margin-top:20px">
+    <h2><span class="num">9</span> RAG Troubleshooting — 15 common failures &amp; fixes</h2>
+    <p class="note" style="margin-top:0">Debug top-down: <b>is the right chunk in the index? → is it retrieved? →
+      does the LLM actually use it?</b> Almost every failure lands in one of these buckets. Click to expand.</p>
+
+    <details class="prob"><summary><span class="pnum">1</span> Answers are slow <span class="tag">speed</span></summary>
+      <div class="pbody"><b style="color:var(--warn)">Spot:</b> total ms high in the metrics chips; LLM ms dominates (it usually does — you saw 1875 of 2704 ms).
+      <br><b style="color:var(--accent2)">Fix:</b> stream the answer token-by-token, switch to a smaller/faster chat model, send fewer &amp; shorter chunks, cache frequent questions.</div></details>
+
+    <details class="prob"><summary><span class="pnum">2</span> Confident but wrong answer (hallucination) <span class="tag">generation</span></summary>
+      <div class="pbody"><b style="color:var(--warn)">Spot:</b> claims in the answer don't appear in any displayed source; faithfulness score drops on your eval set.
+      <br><b style="color:var(--accent2)">Fix:</b> harden the prompt ("answer ONLY from sources, otherwise say you don't know"), improve context precision with a reranker, require inline citations like (Source 1).</div></details>
+
+    <details class="prob"><summary><span class="pnum">3</span> Retrieved chunks are irrelevant <span class="tag">retrieval</span></summary>
+      <div class="pbody"><b style="color:var(--warn)">Spot:</b> top score consistently low (&lt; 0.3) and the sources read off-topic.
+      <br><b style="color:var(--accent2)">Fix:</b> better chunking, hybrid search (BM25 + vector), an embedding model matched to your language/domain.</div></details>
+
+    <details class="prob"><summary><span class="pnum">4</span> The right chunk exists but is never retrieved <span class="tag">retrieval</span></summary>
+      <div class="pbody"><b style="color:var(--warn)">Spot:</b> you can find the passage manually (Pinecone Browser) but it never appears in top-3 → a recall failure.
+      <br><b style="color:var(--accent2)">Fix:</b> raise k then rerank down to 3, query rewriting (LLM rephrases the question), HyDE, smaller chunks.</div></details>
+
+    <details class="prob"><summary><span class="pnum">5</span> Chunks cut ideas in half <span class="tag">chunking</span></summary>
+      <div class="pbody"><b style="color:var(--warn)">Spot:</b> sources end mid-sentence; answers contain half a fact (a salary without its currency…).
+      <br><b style="color:var(--accent2)">Fix:</b> sentence / paragraph / recursive splitting, add overlap, increase chunk size.</div></details>
+
+    <details class="prob"><summary><span class="pnum">6</span> Chunks too big and diluted <span class="tag">chunking</span></summary>
+      <div class="pbody"><b style="color:var(--warn)">Spot:</b> scores look fine but the LLM misses the detail buried in a wall of text; context window bloats.
+      <br><b style="color:var(--accent2)">Fix:</b> smaller chunks, structure-aware splitting, reranker to surface the sharpest piece.</div></details>
+
+    <details class="prob"><summary><span class="pnum">7</span> Junk chunks: headers, page numbers <span class="tag">data</span></summary>
+      <div class="pbody"><b style="color:var(--warn)">Spot:</b> "min chunk chars" tiny after upload (you saw min = 12!), junk strings show up as sources.
+      <br><b style="color:var(--accent2)">Fix:</b> drop chunks under ~50 chars, strip headers/footers/page numbers before splitting.</div></details>
+
+    <details class="prob"><summary><span class="pnum">8</span> Broken PDF extraction <span class="tag">data</span></summary>
+      <div class="pbody"><b style="color:var(--warn)">Spot:</b> extracted text has glued words, wrong order, or is empty — scanned pages return nothing.
+      <br><b style="color:var(--accent2)">Fix:</b> try a better extractor (pymupdf), run OCR for scans (tesseract), normalize line breaks before chunking. Garbage in = garbage retrieved.</div></details>
+
+    <details class="prob"><summary><span class="pnum">9</span> Vocabulary mismatch <span class="tag">retrieval</span></summary>
+      <div class="pbody"><b style="color:var(--warn)">Spot:</b> user says "fire an employee", the document says "termination of employment" — scores sag although the answer exists.
+      <br><b style="color:var(--accent2)">Fix:</b> hybrid BM25, LLM query expansion (add synonyms/rephrasings), a domain glossary folded into the query.</div></details>
+
+    <details class="prob"><summary><span class="pnum">10</span> Exact codes &amp; numbers not found <span class="tag">retrieval</span></summary>
+      <div class="pbody"><b style="color:var(--warn)">Spot:</b> queries like "invoice INV-2044" or "model X-200" fail — embeddings blur exact tokens into fuzzy meaning.
+      <br><b style="color:var(--accent2)">Fix:</b> the BM25 side of hybrid search handles exact strings; also store IDs in metadata and filter on them.</div></details>
+
+    <details class="prob"><summary><span class="pnum">11</span> Multi-hop questions fail <span class="tag">generation</span></summary>
+      <div class="pbody"><b style="color:var(--warn)">Spot:</b> the answer needs facts from 2+ places ("compare the 2023 and 2024 salaries") but retrieval brings only one side.
+      <br><b style="color:var(--accent2)">Fix:</b> decompose into sub-questions, retrieve per sub-question, merge contexts; raise k.</div></details>
+
+    <details class="prob"><summary><span class="pnum">12</span> Lost in the middle <span class="tag">generation</span></summary>
+      <div class="pbody"><b style="color:var(--warn)">Spot:</b> with 10+ chunks in context the LLM reliably uses the first and last, ignoring the middle ones.
+      <br><b style="color:var(--accent2)">Fix:</b> send only the best 3–5 chunks, order them best-first, use a reranker to pick them.</div></details>
+
+    <details class="prob"><summary><span class="pnum">13</span> Stale index — documents changed <span class="tag">ops</span></summary>
+      <div class="pbody"><b style="color:var(--warn)">Spot:</b> the answer matches an old version of the PDF, not the current one.
+      <br><b style="color:var(--accent2)">Fix:</b> re-index on every change; deterministic IDs (this project's md5 of filename+strategy+index) make re-uploads overwrite instead of duplicate; delete vectors of removed files.</div></details>
+
+    <details class="prob"><summary><span class="pnum">14</span> Duplicates &amp; mixed chunking runs <span class="tag">ops</span></summary>
+      <div class="pbody"><b style="color:var(--warn)">Spot:</b> near-identical sources appear twice; vector count larger than expected (your 165 vs 85 moment — two strategies of the same file living together).
+      <br><b style="color:var(--accent2)">Fix:</b> Clear index before switching chunking settings, include the strategy in the ID, deduplicate by content hash.</div></details>
+
+    <details class="prob"><summary><span class="pnum">15</span> No refusal when the answer isn't there <span class="tag">generation</span></summary>
+      <div class="pbody"><b style="color:var(--warn)">Spot:</b> an empty or unrelated index still produces fluent answers out of thin air.
+      <br><b style="color:var(--accent2)">Fix:</b> threshold on top score (e.g. &lt; 0.25 → reply "not found in the documents"), prompt explicitly permits refusal, show scores to the user like this app does.</div></details>
+  </div>
+</div>
+
+<script>
+/* توضیح هر استراتژی، برای آموزش */
+const HINTS = {
+  fixed: "Cuts text every N characters with an overlap so sentences at chunk borders are not lost. Simple and predictable.",
+  sentence: "Splits on sentence endings (. ! ? ؟) and packs whole sentences up to the chunk size. No sentence is cut in half.",
+  paragraph: "Splits on blank lines and merges small paragraphs up to the chunk size. Keeps ideas together — if the PDF has real paragraphs."
+};
+let strategy = "fixed";
+
+const $ = id => document.getElementById(id);
+$("hint").textContent = HINTS.fixed;
+
+/* انتخاب استراتژی chunk */
+$("seg").addEventListener("click", e => {
+  if (e.target.tagName !== "BUTTON") return;
+  document.querySelectorAll("#seg button").forEach(b => b.classList.remove("sel"));
+  e.target.classList.add("sel");
+  strategy = e.target.dataset.s;
+  $("hint").textContent = HINTS[strategy];
+  $("coverlap").disabled = strategy !== "fixed";   // همپوشانی فقط برای fixed معنا دارد
+});
+
+/* درگ‌اند‌دراپ */
+const drop = $("drop");
+drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("over"); });
+drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+drop.addEventListener("drop", e => {
+  e.preventDefault(); drop.classList.remove("over");
+  $("file").files = e.dataTransfer.files;
+  showFiles();
+});
+$("file").addEventListener("change", showFiles);
+function showFiles(){
+  const names = [...$("file").files].map(f => f.name).join(" · ");
+  $("fname").textContent = names;
+}
+
+/* روشن کردن مرحله‌های پایپ‌لاین هنگام اجرا */
+function glow(group, on){
+  document.querySelectorAll(`.step[data-g="${group}"]`)
+    .forEach(s => s.classList.toggle("on", on));
+}
+
+/* آمار داشبورد */
+async function loadStats(){
+  const s = await (await fetch("/stats")).json();
+  $("st-vectors").textContent = s.total_vectors;
+  $("st-dim").textContent = s.dimension;
+  $("st-index").textContent = s.index_name;
+  $("st-emb").textContent = s.embedding_model;
+  $("st-chat").textContent = s.chat_model;
+}
+loadStats();
+
+/* آپلود همه فایل‌های انتخاب‌شده، یکی‌یکی */
+async function uploadAll(){
+  const files = $("file").files;
+  $("uperr").style.display = "none";
+  if (!files.length) return showErr("uperr", "Choose a PDF file first.");
+
+  const btn = $("upbtn");
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span>Indexing…';
+  glow("up", true);
+  $("upres").style.display = "block";
+  $("upres").innerHTML = "";
+
+  try {
+    for (const f of files) {
+      const fd = new FormData();
+      fd.append("file", f);
+      fd.append("strategy", strategy);
+      fd.append("chunk_size", $("csize").value);
+      fd.append("overlap", $("coverlap").value);
+
+      const r = await fetch("/upload", { method: "POST", body: fd });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Upload failed");
+
+      /* شاخص‌های chunking برای این فایل */
+      $("upres").innerHTML += `
+        <div style="margin-bottom:10px">
+          <div class="fname" style="font-family:var(--mono);font-size:12px;color:#fff;margin-bottom:7px">📄 ${d.filename}</div>
+          <div class="chips">
+            <span class="chip">pages <b>${d.pages}</b></span>
+            <span class="chip">chars <b>${d.total_chars.toLocaleString()}</b></span>
+            <span class="chip">chunks <b>${d.num_chunks}</b></span>
+            <span class="chip">avg <b>${d.avg_chunk_chars}</b> ch</span>
+            <span class="chip">min <b>${d.min_chunk_chars}</b></span>
+            <span class="chip">max <b>${d.max_chunk_chars}</b></span>
+            <span class="chip">embed <b>${d.embed_ms}</b> ms</span>
+            <span class="chip">upsert <b>${d.upsert_ms}</b> ms</span>
+          </div>
+        </div>`;
+    }
+    loadStats();
+  } catch (err) {
+    showErr("uperr", err.message);
+  }
+  glow("up", false);
+  btn.disabled = false; btn.innerHTML = "⬆ Upload & Index";
+}
+
+/* پرسیدن سؤال */
+async function ask(){
+  const q = $("q").value.trim();
+  $("askerr").style.display = "none";
+  if (!q) return showErr("askerr", "Type a question first.");
+
+  const btn = $("askbtn");
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span>Thinking…';
+  glow("ask", true);
+  $("answer").style.display = "none";
+  $("sources").style.display = "none";
+  $("qmetrics").style.display = "none";
+
+  try {
+    const r = await fetch("/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question: q })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "Request failed");
+
+    /* پاسخ */
+    $("answer-text").textContent = d.answer;
+    $("answer").style.display = "block";
+
+    /* شاخص‌های این پرسش: زمان هر مرحله + بهترین امتیاز شباهت */
+    const m = d.metrics;
+    $("qmetrics").innerHTML = `
+      <span class="chip">embed <b>${m.embed_ms}</b> ms</span>
+      <span class="chip">search <b>${m.search_ms}</b> ms</span>
+      <span class="chip">LLM <b>${m.llm_ms}</b> ms</span>
+      <span class="chip">total <b>${m.total_ms}</b> ms</span>
+      <span class="chip">top score <b>${(m.top_score * 100).toFixed(1)}%</b></span>`;
+    $("qmetrics").style.display = "flex";
+
+    /* منابع: نام فایل + امتیاز + متن chunk */
+    $("srclist").innerHTML = d.sources.map((s, i) => `
+      <details class="src" ${i === 0 ? "open" : ""}>
+        <summary>
+          <span class="fname">📄 ${s.filename}</span>
+          <span class="cidx">chunk #${s.chunk_index}</span>
+          <span class="scorebar"><i style="width:${(s.score * 100).toFixed(0)}%"></i></span>
+          <span class="scoreval">${(s.score * 100).toFixed(1)}%</span>
+        </summary>
+        <div class="txt" dir="auto">${escapeHtml(s.text)}</div>
+      </details>`).join("");
+    $("sources").style.display = "block";
+  } catch (err) {
+    showErr("askerr", err.message);
+  }
+  glow("ask", false);
+  btn.disabled = false; btn.innerHTML = "✦ Ask";
+}
+
+/* پاک کردن ایندکس */
+async function resetIndex(){
+  if (!confirm("Delete ALL vectors from the index?")) return;
+  await fetch("/reset", { method: "POST" });
+  loadStats();
+}
+
+function showErr(id, msg){ $(id).textContent = "⚠ " + msg; $(id).style.display = "block"; }
+function escapeHtml(s){ const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+
+/* Enter برای پرسیدن (Shift+Enter = خط جدید) */
+$("q").addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ask(); }
+});
+
+/* ================================================================
+   آزمایشگاه وکتور — بخش الف: امبدینگ واقعی
+   دو متن را به سرور می‌فرستیم؛ سرور نرم و سه متریک را برمی‌گرداند
+   ================================================================ */
+async function runLab(){
+  const btn = $("labbtn");
+  $("laberr").style.display = "none";
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span>Embedding…';
+  try {
+    const r = await fetch("/lab", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text_a: $("ta").value, text_b: $("tb").value })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "Request failed");
+
+    $("labchips").innerHTML = `
+      <span class="chip">dim <b>${d.dimension}</b></span>
+      <span class="chip">‖A‖ <b>${d.norm_a}</b></span>
+      <span class="chip">‖B‖ <b>${d.norm_b}</b></span>
+      <span class="chip">${d.is_normalized ? "✅ <b>normalized</b>" : "⚠ <b>not normalized</b>"}</span>
+      <span class="chip" style="border-color:rgba(124,108,255,.5)">cosine <b>${d.cosine}</b></span>
+      <span class="chip" style="border-color:rgba(49,208,170,.5)">dot <b>${d.dot}</b></span>
+      <span class="chip" style="border-color:rgba(255,180,84,.5)">euclidean <b>${d.euclidean}</b></span>`;
+
+    /* فرمول جالب: برای وکتورهای نرمال، euclidean = √(2 − 2·cos) */
+    const predicted = Math.sqrt(Math.max(0, 2 - 2 * d.cosine)).toFixed(4);
+    $("labnote").innerHTML = d.is_normalized
+      ? `Both norms ≈ 1 → OpenAI <b>pre-normalizes</b> its embeddings, so <b>cosine ≈ dot</b>
+         (${d.cosine} vs ${d.dot}). Bonus: for unit vectors ‖A−B‖ = √(2−2·cos) = <b>${predicted}</b>
+         — compare with euclidean above. Vector A starts with [${d.sample_a.join(", ")}, …]`
+      : `Norms are not 1 → this model does <b>not</b> normalize, so cosine (${d.cosine})
+         and dot (${d.dot}) disagree.`;
+    $("labres").style.display = "block";
+  } catch (err) { showErr("laberr", err.message); }
+  btn.disabled = false; btn.innerHTML = "⚗ Embed & Compare";
+}
+
+/* ================================================================
+   آزمایشگاه وکتور — بخش ب: هندسه دوبعدی تعاملی
+   کمان بنفش = زاویه (cosine) · پاره‌خط سبز = تصویر A روی B (dot)
+   خط‌چین نارنجی = فاصله نوک‌به‌نوک (euclidean)
+   ================================================================ */
+const cv = $("cv"), ctx = cv.getContext("2d");
+const CW = 470, CH = 300, DPR = window.devicePixelRatio || 1;
+cv.width = CW * DPR; cv.height = CH * DPR; ctx.scale(DPR, DPR);
+
+const O = { x: 64, y: CH - 46 };   // مبدأ مختصات روی بوم
+const UNIT = 56;                    // هر ۱ واحد ریاضی = ۵۶ پیکسل
+let A = { x: 1.0, y: 1.7 }, B = { x: 2.9, y: 0.8 };
+const DEF = { A: { ...A }, B: { ...B } };
+let drag = null;
+
+/* تبدیل مختصات ریاضی ↔ پیکسل (محور y در بوم برعکس است) */
+const px = v => ({ x: O.x + v.x * UNIT, y: O.y - v.y * UNIT });
+
+function geoMetrics(){
+  const dot = A.x * B.x + A.y * B.y;
+  const la = Math.hypot(A.x, A.y), lb = Math.hypot(B.x, B.y);
+  const cos = dot / ((la * lb) || 1);
+  return { dot, la, lb, cos,
+    eu: Math.hypot(A.x - B.x, A.y - B.y),
+    deg: Math.acos(Math.max(-1, Math.min(1, cos))) * 180 / Math.PI };
+}
+
+function arrowHead(p, ang, color){
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(p.x, p.y);
+  ctx.lineTo(p.x - 11 * Math.cos(ang - 0.4), p.y - 11 * Math.sin(ang - 0.4));
+  ctx.lineTo(p.x - 11 * Math.cos(ang + 0.4), p.y - 11 * Math.sin(ang + 0.4));
+  ctx.fill();
+}
+
+function drawGeo(){
+  ctx.clearRect(0, 0, CW, CH);
+  const css = getComputedStyle(document.documentElement);
+  const ACC = css.getPropertyValue("--accent").trim(),
+        GRN = css.getPropertyValue("--accent2").trim(),
+        WRN = css.getPropertyValue("--warn").trim();
+
+  /* شبکه و محورها */
+  ctx.strokeStyle = "#1a2138"; ctx.lineWidth = 1;
+  for (let x = O.x % UNIT; x < CW; x += UNIT){ ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, CH); ctx.stroke(); }
+  for (let y = O.y % UNIT; y < CH; y += UNIT){ ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CW, y); ctx.stroke(); }
+  ctx.strokeStyle = "#2b3555";
+  ctx.beginPath(); ctx.moveTo(0, O.y); ctx.lineTo(CW, O.y); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(O.x, 0); ctx.lineTo(O.x, CH); ctx.stroke();
+
+  const m = geoMetrics(), pa = px(A), pb = px(B);
+
+  /* euclidean: خط‌چین بین دو نوک */
+  ctx.setLineDash([5, 4]); ctx.strokeStyle = WRN; ctx.lineWidth = 1.6;
+  ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke();
+  ctx.setLineDash([]);
+
+  /* dot: تصویر (projection) وکتور A روی راستای B */
+  const t = m.dot / ((m.lb * m.lb) || 1);
+  const proj = px({ x: B.x * t, y: B.y * t });
+  ctx.strokeStyle = GRN; ctx.globalAlpha = 0.75; ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.moveTo(O.x, O.y); ctx.lineTo(proj.x, proj.y); ctx.stroke();
+  ctx.globalAlpha = 1;
+  ctx.setLineDash([3, 3]); ctx.strokeStyle = "#3a4664"; ctx.lineWidth = 1;  // عمودِ کمکی
+  ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(proj.x, proj.y); ctx.stroke();
+  ctx.setLineDash([]);
+
+  /* cosine: کمان زاویه بین دو وکتور */
+  const aA = Math.atan2(A.y, A.x), aB = Math.atan2(B.y, B.x);
+  let dAng = aB - aA;
+  if (dAng > Math.PI) dAng -= 2 * Math.PI;
+  if (dAng < -Math.PI) dAng += 2 * Math.PI;
+  ctx.strokeStyle = ACC; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(O.x, O.y, 26, -aA, -aB, dAng > 0); ctx.stroke();
+  const mid = aA + dAng / 2;
+  ctx.fillStyle = ACC; ctx.font = "600 11px 'JetBrains Mono'";
+  ctx.fillText("θ=" + m.deg.toFixed(0) + "°", O.x + 40 * Math.cos(mid) - 12, O.y - 40 * Math.sin(mid) + 4);
+
+  /* خود وکتورها + دستگیره نوک */
+  for (const [v, p, col, name] of [[A, pa, ACC, "A"], [B, pb, GRN, "B"]]) {
+    ctx.strokeStyle = col; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(O.x, O.y); ctx.lineTo(p.x, p.y); ctx.stroke();
+    arrowHead(p, Math.atan2(p.y - O.y, p.x - O.x), col);
+    ctx.beginPath(); ctx.arc(p.x, p.y, 5.5, 0, 7); ctx.fillStyle = "#0d1122"; ctx.fill();
+    ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = col; ctx.font = "800 13px Inter";
+    ctx.fillText(name, p.x + 9, p.y - 9);
+  }
+
+  /* چیپ‌های عددی زنده */
+  $("geochips").innerHTML = `
+    <span class="chip">|A| <b>${m.la.toFixed(2)}</b></span>
+    <span class="chip">|B| <b>${m.lb.toFixed(2)}</b></span>
+    <span class="chip" style="border-color:rgba(124,108,255,.5)">θ <b>${m.deg.toFixed(1)}°</b> · cos <b>${m.cos.toFixed(3)}</b></span>
+    <span class="chip" style="border-color:rgba(49,208,170,.5)">dot <b>${m.dot.toFixed(2)}</b></span>
+    <span class="chip" style="border-color:rgba(255,180,84,.5)">euclidean <b>${m.eu.toFixed(2)}</b></span>`;
+}
+
+/* درگ کردن نوک وکتورها (ماوس و لمسی) */
+function evPos(e){
+  const r = cv.getBoundingClientRect();
+  const p = e.touches ? e.touches[0] : e;
+  return { x: (p.clientX - r.left) * (CW / r.width), y: (p.clientY - r.top) * (CH / r.height) };
+}
+function startDrag(e){
+  const p = evPos(e), pa = px(A), pb = px(B);
+  if (Math.hypot(p.x - pa.x, p.y - pa.y) < 16) drag = "A";
+  else if (Math.hypot(p.x - pb.x, p.y - pb.y) < 16) drag = "B";
+  if (drag) e.preventDefault();
+}
+function moveDrag(e){
+  if (!drag) return;
+  const p = evPos(e);
+  const v = { x: (p.x - O.x) / UNIT, y: (O.y - p.y) / UNIT };
+  if (Math.hypot(v.x, v.y) > 0.15) {          // وکتور صفر ممنوع
+    if (drag === "A") A = v; else B = v;
+    drawGeo();
+  }
+  e.preventDefault();
+}
+cv.addEventListener("mousedown", startDrag);
+window.addEventListener("mousemove", moveDrag);
+window.addEventListener("mouseup", () => drag = null);
+cv.addEventListener("touchstart", startDrag, { passive: false });
+cv.addEventListener("touchmove", moveDrag, { passive: false });
+window.addEventListener("touchend", () => drag = null);
+
+/* نرمال‌سازی: طول هر دو = ۱ → زاویه (cosine) ثابت می‌ماند! */
+function normalizeAB(){
+  const la = Math.hypot(A.x, A.y) || 1, lb = Math.hypot(B.x, B.y) || 1;
+  A = { x: A.x / la, y: A.y / la };
+  B = { x: B.x / lb, y: B.y / lb };
+  drawGeo();
+}
+/* کش دادن B: فقط dot و euclidean عوض می‌شوند */
+function scaleB(){
+  if (Math.hypot(B.x, B.y) < 4) { B = { x: B.x * 1.5, y: B.y * 1.5 }; drawGeo(); }
+}
+function resetAB(){ A = { ...DEF.A }; B = { ...DEF.B }; drawGeo(); }
+drawGeo();
+
+/* ================================================================
+   مثال عددی تعاملی: ۴ chunk ذخیره‌شده + ۱ سؤال
+   متریک را عوض کن — محاسبه و رتبه‌بندی زنده عوض می‌شود
+   ================================================================ */
+const WXQ = { id: "Q", v: [1,0,1,0,1], meaning: '"What are the conditions for ending the contract?"' };
+const WXDOCS = [
+  { id: "A", v: [1,0,1,0,0], meaning: "Contract termination with written notice" },
+  { id: "B", v: [0,1,0,1,0], meaning: "Employee salary and benefits" },
+  { id: "C", v: [1,1,0,0,1], meaning: "End of cooperation and contract terms" },
+  { id: "D", v: [0,0,1,1,0], meaning: "Technical obligations of the project" },
+];
+let wxMetric = "cosine", wxNormOn = false;
+
+const vNorm = v => Math.sqrt(v.reduce((s, x) => s + x * x, 0));
+const vUnit = v => { const n = vNorm(v) || 1; return v.map(x => x / n); };
+const vDot  = (a, b) => a.reduce((s, x, i) => s + x * b[i], 0);
+const vEuc  = (a, b) => Math.sqrt(a.reduce((s, x, i) => s + (x - b[i]) * (x - b[i]), 0));
+const w2 = x => String(Math.round(x * 100) / 100);
+const w3 = x => x.toFixed(3);
+
+/* چیپ بردارها: بردار خام + طول (نرم) + معنی chunk */
+(function () {
+  $("wxvecs").innerHTML = [WXQ, ...WXDOCS].map(r => {
+    const ss = r.v.reduce((s, x) => s + x * x, 0);
+    return `<div class="wxchip"${r.id === "Q" ? ' style="border-color:var(--accent)"' : ""}>
+      <b>${r.id}</b> = <code>[${r.v.join(", ")}]</code> · ‖${r.id}‖ = √${ss} ≈ ${w3(vNorm(r.v))}
+      <span class="mean">${r.id === "Q" ? "🔍" : "📄"} ${r.meaning}</span></div>`;
+  }).join("");
+})();
+
+/* درس هر حالت */
+const WXHINTS = {
+  "cosine": "cos = (Q·X) / (‖Q‖·‖X‖). Lengths cancel inside the formula, so the Normalize toggle changes nothing. A wins — it shares the strongest axes with Q. B is orthogonal (no shared axis) = totally unrelated.",
+  "dot-raw": "⚠ A and C TIE at 2.000! Raw dot rewards vector length: C points further from Q, but it is a longer vector, which keeps it level with A. This is exactly why raw dot product is unsafe on un-normalized vectors.",
+  "dot-norm": "After normalization the dot numbers become 0.816, 0.667, … — identical to cosine, identical ranking. This is why OpenAI ships unit-length embeddings: cheap dot = safe cosine.",
+  "euclid-raw": "This is a distance, not a similarity: LOWER = closer, so the list is sorted ascending. With these vectors the order happens to agree with cosine.",
+  "euclid-norm": "On unit vectors d = √(2 − 2·cos) — a pure function of cosine, so the ranking is guaranteed to match cosine. Always.",
+};
+
+function wxRender() {
+  const qv = wxNormOn ? vUnit(WXQ.v) : WXQ.v;
+  const rows = WXDOCS.map(d => {
+    const dv = wxNormOn ? vUnit(d.v) : d.v;
+    const dp = vDot(qv, dv);
+    let val, calc;
+    if (wxMetric === "dot") {
+      val = dp;
+      calc = qv.map((x, i) => `${w2(x)}·${w2(dv[i])}`).join(" + ") + ` = <b>${w3(dp)}</b>`;
+    } else if (wxMetric === "cosine") {
+      val = dp / ((vNorm(qv) * vNorm(dv)) || 1);
+      calc = `Q·${d.id} = ${w3(dp)} → ${w3(dp)} / (${w3(vNorm(qv))} × ${w3(vNorm(dv))}) = <b>${w3(val)}</b>`;
+    } else {
+      val = vEuc(qv, dv);
+      calc = qv.map((x, i) => `(${w2(x)}−${w2(dv[i])})²`).join("+") + ` → √ = <b>${w3(val)}</b>`;
+    }
+    return { id: d.id, meaning: d.meaning, val, calc };
+  });
+
+  const asc = wxMetric === "euclid";          // فاصله: کمتر = نزدیک‌تر
+  rows.sort((a, b) => asc ? a.val - b.val : b.val - a.val);
+  const maxv = Math.max(...rows.map(r => Math.abs(r.val))) || 1;
+
+  $("wxtable").innerHTML = rows.map((r, i) => {
+    const pct = asc ? Math.max(4, (maxv - r.val) / maxv * 100)
+                    : Math.max(4, Math.abs(r.val) / maxv * 100);
+    return `<div class="wxrow">
+      <span class="wxrank">${i + 1}</span>
+      <span class="wxid"><b>${r.id}</b><span>${r.meaning}</span></span>
+      <span class="wxcalc">${r.calc}</span>
+      <span class="scorebar"><i style="width:${pct}%"></i></span>
+      <span class="wxval">${w3(r.val)}</span>
+    </div>`;
+  }).join("");
+
+  /* فرمول عمومی متریک انتخاب‌شده */
+  const WXFORMULAS = {
+    cosine: 'cos(Q, X) = <b>(Q·X) / (‖Q‖ × ‖X‖)</b> = Σ qᵢ·xᵢ / ( √Σqᵢ² × √Σxᵢ² )',
+    dot:    'Q·X = <b>Σ qᵢ·xᵢ</b> = q₁x₁ + q₂x₂ + q₃x₃ + q₄x₄ + q₅x₅',
+    euclid: 'd(Q, X) = <b>‖Q − X‖</b> = √( (q₁−x₁)² + (q₂−x₂)² + … + (q₅−x₅)² )',
+  };
+  $("wxformula").innerHTML = WXFORMULAS[wxMetric];
+
+  const key = wxMetric === "cosine" ? "cosine" : `${wxMetric}-${wxNormOn ? "norm" : "raw"}`;
+  $("wxhint").innerHTML = WXHINTS[key];
+
+  const tie = Math.abs(rows[0].val - rows[1].val) < 1e-9;
+  $("wxtopk").innerHTML =
+    `<b>top_k = 2</b> → the index returns IDs <b>[${rows[0].id}, ${rows[1].id}]</b> with `
+    + `${asc ? "distances" : "scores"} <b>[${w3(rows[0].val)}, ${w3(rows[1].val)}]</b>`
+    + (tie ? ` — <span style="color:var(--warn)">exact tie: which one comes first is arbitrary!</span>` : "")
+    + (asc ? " (lower = closer)" : "");
+}
+
+$("wxmetric").addEventListener("click", e => {
+  if (e.target.tagName !== "BUTTON") return;
+  document.querySelectorAll("#wxmetric button").forEach(b => b.classList.remove("sel"));
+  e.target.classList.add("sel");
+  wxMetric = e.target.dataset.m;
+  wxRender();
+});
+$("wxnorm").addEventListener("change", e => { wxNormOn = e.target.checked; wxRender(); });
+wxRender();
+</script>
+</body>
+</html>
