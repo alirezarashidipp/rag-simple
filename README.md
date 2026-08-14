@@ -1,91 +1,80 @@
-# پروژه ساده RAG 📚
+# Simple RAG 📚
 
-یک سیستم RAG کامل ولی ساده برای یادگیری: PDF آپلود می‌کنی، سؤال می‌پرسی، پاسخ را همراه با منبع می‌گیری.
+A complete but deliberately simple RAG system for learning: upload a PDF, ask a question, get an answer with its sources — plus an interactive course on how RAG actually works.
 
-## جریان کار
+## Pipeline
 
 ```
 PDF Upload → Extract Text → Split into Chunks → OpenAI Embedding → Pinecone
 User Question → Question Embedding → Top 3 Similar Chunks → OpenAI LLM → Answer + Sources
 ```
 
-## ساختار پروژه
+## Project structure
 
-| فایل | نقش |
+| File | Role |
 |---|---|
-| `app.py` | همه منطق RAG (بک‌اند Flask) — کامنت فارسی دارد |
-| `templates/index.html` | رابط کاربری |
-| `.env.local` | کلیدها و نام مدل‌ها (از قبل داری) |
+| `app.py` | All the RAG logic (Flask backend) |
+| `templates/index.html` | The UI — also 9 interactive learning sections |
+| `.env.local` | Keys and model names (not in git — see `.env.example`) |
 
-## اجرا
+## Setup
+
+Create `.env.local` from `.env.example` and fill in your keys:
+
+```
+OPENAI_API_KEY=...
+PINECONE_API_KEY=...
+PINECONE_INDEX_NAME=...
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+OPENAI_CHAT_MODEL=gpt-4.1-mini
+```
+
+Then run:
 
 ```bash
-# داخل پوشه پروژه (venv خودت فعال باشد):
 pip install -r requirements.txt
 python app.py
 ```
 
-بعد در مرورگر: **http://localhost:5000**
+Open **http://localhost:5000**. The Pinecone index is created automatically on first run if it does not exist.
 
-## نقشه کد ↔ مفاهیم RAG
+## Code map — where each RAG concept lives
 
-| مفهوم | کجای `app.py` |
+| Concept | Where in `app.py` |
 |---|---|
-| Extract Text | تابع `upload()` — با `pypdf` |
-| Chunking (سه روش) | `chunk_fixed` / `chunk_sentence` / `chunk_paragraph` |
+| Extract text | `upload()` — via `pypdf` |
+| Chunking (3 strategies) | `chunk_fixed` / `chunk_sentence` / `chunk_paragraph` |
 | Embedding | `embed_texts()` |
-| ذخیره وکتور | `index.upsert(...)` در `upload()` |
-| جستجوی شباهت | `index.query(top_k=3)` در `ask()` |
-| پرامپت + LLM | `system_prompt` و `client.chat.completions.create` در `ask()` |
+| Storing vectors | `index.upsert(...)` inside `upload()` |
+| Similarity search | `index.query(top_k=3)` inside `ask()` |
+| Prompt + LLM | `system_prompt` and `client.chat.completions.create` inside `ask()` |
 
-## سه استراتژی Chunk
+## The three chunking strategies
 
-- **Fixed size**: هر N کاراکتر یک تکه + همپوشانی (overlap) تا جمله‌های مرزی گم نشوند.
-- **Sentence**: جمله‌ها کامل می‌مانند؛ تا سقف اندازه کنار هم چیده می‌شوند.
-- **Paragraph**: بر اساس خط خالی؛ پاراگراف‌های کوتاه به هم می‌چسبند.
+- **Fixed size** — a chunk every N characters plus an overlap, so sentences on a border are not lost.
+- **Sentence** — sentences stay whole and are packed up to the size limit.
+- **Paragraph** — split on blank lines; short paragraphs are merged together.
 
-## آزمایشگاه وکتور (بخش ۳ در UI) ⚗
+## Learning sections in the UI
 
-- **Embed & Compare**: دو متن را واقعاً امبد می‌کند و طول (نرم L2) وکتورها + هر سه متریک را نشان می‌دهد. می‌بینی نرم ≈ ۱ است — یعنی OpenAI از قبل نرمال کرده — و در نتیجه cosine ≈ dot.
-- **2D playground**: دو وکتور را با ماوس بکش. کمان بنفش = زاویه (cosine)، پاره‌خط سبز = تصویرِ A روی B (dot)، خط‌چین نارنجی = فاصله نوک‌به‌نوک (euclidean). دکمه **Normalize** نشان می‌دهد cosine به طول وکتور بی‌اعتناست؛ دکمه **B × 1.5** نشان می‌دهد dot با طول بزرگ می‌شود.
-- فرمول قشنگ: برای وکتورهای نرمال ‖A−B‖ = √(2 − 2·cos) — یعنی euclidean و cosine عملاً یک اطلاعات را می‌دهند.
-- **Worked example**: چهار chunk ذخیره‌شده با بردار ۵بُعدی ساختگی + یک سؤال (Q). متریک را عوض کن و محاسبات و رتبه‌بندی را زنده ببین. درس‌ها: با dot خام، A و C مساوی می‌شوند (dot به طول وکتور جایزه می‌دهد!)؛ بعد از نرمال‌سازی dot ≡ cosine؛ euclidean روی وکتورهای نرمال همیشه رتبه‌بندی cosine را می‌دهد. خروجی هم مثل FAISS: `top_k=2 → [A, C]`.
+**3 · Vector Lab** — *Embed & Compare* really embeds two texts and shows their L2 norms plus all three metrics; you can see the norms are ≈ 1, meaning OpenAI pre-normalizes, so cosine ≈ dot. The *2D playground* lets you drag two vectors and watch the angle (cosine), the projection (dot) and the tip-to-tip distance (euclidean) change live. The *worked example* stores 4 toy 5-dimensional chunks plus a query: switch metrics and watch the ranking and the arithmetic update. Key lessons — with raw dot product two chunks tie (dot rewards vector length!), after normalization dot ≡ cosine, and on unit vectors euclidean always reproduces the cosine ranking. Output is shown exactly like FAISS: `top_k=2 → [A, C]`.
 
-## باغ‌وحش ایندکس‌های ANN (بخش ۴ در UI) 🦁
+**4 · ANN Index Zoo** — the four families of fast approximate search, each with a diagram: **IVF** (cluster first, search only the nearest cells), **HNSW** (multi-layer graph — long hops on top, fine steps below; what Pinecone uses under the hood), **DiskANN** (graph on SSD with compressed codes in RAM, billion scale), **Tree-based** (recursive space partitioning — KD-Tree, Annoy).
 
-چهار خانواده اصلی جستجوی تقریبی سریع، با دیاگرام متحرک: **IVF** (خوشه‌بندی؛ فقط سلول‌های نزدیک جستجو می‌شوند)، **HNSW** (گراف چندلایه؛ پرش‌های بلند بالا، قدم‌های دقیق پایین — چیزی که Pinecone پشت صحنه استفاده می‌کند)، **DiskANN** (گراف روی SSD با کدهای فشرده PQ در RAM؛ مقیاس میلیاردی)، و **Tree-based** (تقسیم بازگشتی فضا؛ KD-Tree و Annoy).
+**5 · Chunking Zoo** — four splitting families with pros, cons and a How line: **Fixed-size**, **Recursive/structure-aware** (the industry default), **Semantic** (embed sentences, cut where similarity drops), **Document-specific** (use the format's own structure). Rule of thumb: start recursive; if retrieval disappoints try semantic; when you control the format go document-specific.
 
-## باغ‌وحش Chunking (بخش ۵ در UI) ✂
+**6 · Embedding dimensions** — 384 / 768 / 1536 / 3072 compared with their real memory cost. More dimensions means a richer semantic space but linearly more memory, storage and search time; fewer is lighter and *not automatically worse* — quality comes from training, not size (check the MTEB leaderboard). OpenAI v3 models are Matryoshka-trained, so the `dimensions` parameter gives you a shorter vector that keeps most of the quality.
 
-چهار خانواده تکه‌تکه کردن متن با دیاگرام و مزایا/معایب: **Fixed-size** (هر N کاراکتر + overlap — همان که در پروژه داریم)، **Recursive/Structure-aware** (اول جداکننده‌های بزرگ مثل پاراگراف، بعد جمله — پیش‌فرض صنعت)، **Semantic** (امبد کردن جمله‌ها و برش جایی که شباهت افت می‌کند = تغییر موضوع)، و **Document-specific** (برش با ساختار خود فرمت: هدرهای Markdown، توابع کد، ردیف‌های جدول).
+**7 · Hybrid search: Fusion & Reranking** — production RAG runs two retrievers in parallel (vector for meaning, BM25 for exact keywords). **Weighted Score Fusion**: `α·vec + (1−α)·bm25` — tunable but normalization is mandatory and fragile. **RRF**: throw the scores away and use ranks only, `Σ 1/(k+rank)` with k≈60 — no normalization, the safe industry default. **Fusion vs Reranking**: fusion merges several lists with cheap arithmetic (microseconds); a reranker is a neural cross-encoder that reads the question and the chunk together and fixes the final order (slower, costs money, runs after fusion and before the LLM). In most stacks the reranker is the single biggest quality jump.
 
-قانون سرانگشتی: با recursive شروع کن؛ اگر کیفیت بازیابی ناامیدکننده بود semantic را امتحان کن؛ اگر فرمت را می‌شناسی document-specific بهترین است.
+**8 · RAG quality metrics** — eight metrics, each with *how to measure / what is good and bad / how to improve*, a diagram and a threshold gauge: **Recall@k** (was the needed chunk retrieved at all — the ceiling of the whole system), **Context Precision**, **MRR**, **Faithfulness** (hallucination check), **Answer Relevance**, **Latency p50/p95**, **Cost per query**, **Top score** (live warning light). Golden rule: change one thing, re-run the same eval set, compare the numbers. Tools that automate this: RAGAS, TruLens, LangSmith.
 
-## بُعد امبدینگ (بخش ۶ در UI) 📏
+**9 · Troubleshooting** — 15 common failures, each with how to spot it and how to fix it: slowness, hallucination, irrelevant retrieval, low recall, chunks cut mid-sentence, oversized or junk chunks, broken PDF extraction, vocabulary mismatch, exact codes not found, multi-hop questions, lost in the middle, stale index, duplicates, and no refusal when the answer is not there. Debug top-down: is the right chunk in the index? → is it retrieved? → does the LLM use it?
 
-مقایسه بصری بُعدهای رایج: **384** (MiniLM — سبک و سریع)، **768** (BERT کلاسیک)، **1536** (مدل تو — text-embedding-3-small)، **3072** (نسخه large). بُعد بیشتر = فضای معنایی غنی‌تر ولی حافظه/هزینه/زمان جستجوی خطی بیشتر؛ بُعد کمتر = سبک‌تر، و لزوماً نه بهتر نه بدتر — کیفیت از آموزش مدل می‌آید نه از اندازه (MTEB را چک کن). نکته: مدل‌های v3 اوپن‌ای‌آی Matryoshka هستند: با پارامتر `dimensions` می‌توانی وکتور کوتاه‌تر بگیری و بیشترِ کیفیت را نگه داری.
+## Suggested exercise 🎓
 
-## جستجوی هیبریدی: Fusion و Reranking (بخش ۷ در UI) 🔀
+1. Index a PDF with **Fixed**, ask a question, note the `top score`.
+2. Clear the index, re-index the same PDF with **Sentence**, ask the same question.
+3. Compare the scores and the answer quality — this is exactly what RAG engineers do.
 
-در سیستم‌های واقعی دو بازیاب موازی داریم: وکتوری (معنا) و BM25 (کلیدواژه دقیق). دو روش ادغام (Fusion) لیست‌هایشان:
-
-- **Weighted Score Fusion**: نمره نهایی = α·vec + (1−α)·bm25 — قابل تنظیم ولی نرمال‌سازی اجباری و شکننده است.
-- **RRF**: نمره‌ها را دور بریز، فقط رتبه: Σ 1/(k+rank) با k≈60 — بدون نرمال‌سازی، پیش‌فرض امن صنعت.
-
-**فرق Fusion با Reranking**: فیوژن چند لیست را با ریاضی ساده یکی می‌کند (رایگان، میکروثانیه)؛ ری‌رنکر یک مدل عصبی (cross-encoder) است که سؤال + chunk را با هم می‌خواند و ترتیب لیست نهایی را هوشمندانه اصلاح می‌کند (کندتر، پولی، بعد از fusion و قبل از LLM). بزرگ‌ترین جهش کیفیت در اغلب سیستم‌های RAG از اضافه کردن reranker می‌آید.
-
-## متریک‌های کیفیت RAG (بخش ۸ در UI) 📊
-
-هشت متریک با «چطور اندازه بگیر / چه عددی خوب است / چطور بهترش کن»: **Recall@k** (آیا chunk لازم اصلاً بازیابی شد؟ سقف کل سیستم)، **Context Precision** (چند تا از k مربوط بودند؟)، **MRR** (اولین پاسخ درست چه رتبه‌ای دارد؟)، **Faithfulness** (هر ادعای پاسخ در منابع هست؟ — سنجش توهم)، **Answer Relevance**، **Latency p50/p95**، **Cost per query** و **Top score** (چراغ سلامت زنده). قانون طلایی: یک چیز را عوض کن، همان eval set را دوباره اجرا کن، اعداد را مقایسه کن. ابزارها: RAGAS، TruLens، LangSmith.
-
-## عیب‌یابی: ۱۵ مشکل رایج (بخش ۹ در UI) 🔧
-
-برای هر مشکل «نشانه» و «راه‌حل»: کندی، توهم، بازیابی نامربوط، recall پایین، برش وسط جمله، chunk بزرگ/ریز، استخراج خراب PDF، ناهمخوانی واژگان، کدهای دقیق، سؤال چندمرحله‌ای، lost in the middle، ایندکس کهنه، تکراری‌ها، و نبودِ «نمی‌دانم». روش دیباگ: از بالا به پایین — chunk درست در ایندکس هست؟ → بازیابی می‌شود؟ → LLM استفاده‌اش می‌کند؟
-
-## تمرین پیشنهادی 🎓
-
-۱. یک PDF را با **Fixed** ایندکس کن، سؤال بپرس و `top score` را یادداشت کن.
-۲. ایندکس را پاک کن (دکمه Clear index)، همان PDF را با **Sentence** ایندکس کن و همان سؤال را بپرس.
-۳. امتیازها و کیفیت پاسخ را مقایسه کن — این دقیقاً کاری است که مهندس‌های RAG می‌کنند!
-
-نکته: امتیاز (score) همان شباهت کسینوسی بین وکتور سؤال و وکتور chunk است (۰ تا ۱).
+Note: the score is the cosine similarity between the question vector and the chunk vector (0 to 1).

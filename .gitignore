@@ -1,19 +1,19 @@
-# کلیدها — هرگز commit نشود!
+# Secrets - never commit!
 .env.local
 .env
 
-# محیط مجازی پایتون
+# Python virtual environment
 .venv/
 venv/
 
-# کش پایتون
+# Python cache
 __pycache__/
 *.py[cod]
 
-# خروجی ابزارها (قابل تولید مجدد)
+# Tool output (regenerable)
 graphify-out/
 
-# سیستم‌عامل و ادیتور
+# OS and editor files
 .DS_Store
 Thumbs.db
 *.swp

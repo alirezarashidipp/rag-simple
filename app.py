@@ -1,15 +1,17 @@
 # -*- coding: utf-8 -*-
 """
-پروژه ساده RAG برای یادگیری
-============================
-جریان کلی:
-  PDF Upload → Extract Text → Split into Chunks → OpenAI Embedding
-  → Pinecone → Question Embedding → Top 3 Chunks → LLM → Answer + Sources
+Simple RAG — a learning project
+===============================
+Pipeline:
+  PDF Upload -> Extract Text -> Split into Chunks -> OpenAI Embedding
+  -> Pinecone -> Question Embedding -> Top 3 Chunks -> LLM -> Answer + Sources
 
-فقط ۳ مسیر (route) داریم:
-  POST /upload  آپلود PDF، تکه‌تکه کردن، امبدینگ و ذخیره در Pinecone
-  POST /ask     سؤال کاربر → جستجو → پاسخ LLM همراه با منابع
-  GET  /stats   آمار ایندکس (تعداد وکتورها، بُعد، نام مدل‌ها)
+Routes:
+  POST /upload  upload a PDF, split it, embed the chunks, store them in Pinecone
+  POST /ask     user question -> similarity search -> LLM answer with sources
+  GET  /stats   index stats (vector count, dimension, model names)
+  POST /lab     educational: embed two texts, compare norms and metrics
+  POST /reset   delete every vector in the index
 """
 
 import os
@@ -25,7 +27,7 @@ from openai import OpenAI
 from pinecone import Pinecone, ServerlessSpec
 
 # ---------------------------------------------------------------
-# ۱) خواندن تنظیمات از فایل .env.local
+# 1) Load configuration from .env.local
 # ---------------------------------------------------------------
 load_dotenv(".env.local")
 
@@ -35,20 +37,20 @@ INDEX_NAME      = os.getenv("PINECONE_INDEX_NAME")
 EMBEDDING_MODEL = os.getenv("OPENAI_EMBEDDING_MODEL")
 CHAT_MODEL      = os.getenv("OPENAI_CHAT_MODEL")
 
-TOP_K = 3  # طبق نمودار: ۳ تکه نزدیک به سؤال
+TOP_K = 3  # how many chunks to send to the LLM
 
-client = OpenAI(api_key=OPENAI_API_KEY)   # کلاینت OpenAI
-pc = Pinecone(api_key=PINECONE_API_KEY)   # کلاینت Pinecone
+client = OpenAI(api_key=OPENAI_API_KEY)   # OpenAI client
+pc = Pinecone(api_key=PINECONE_API_KEY)   # Pinecone client
 
 app = Flask(__name__)
 
 
 # ---------------------------------------------------------------
-# ۲) امبدینگ: تبدیل متن به وکتور
+# 2) Embedding: turn text into vectors
 # ---------------------------------------------------------------
 def embed_texts(texts):
-    """لیستی از متن‌ها را به لیستی از وکتورها تبدیل می‌کند.
-    برای متن‌های زیاد، دسته‌های ۱۰۰تایی می‌فرستیم."""
+    """Convert a list of texts into a list of vectors.
+    Large inputs are sent in batches of 100."""
     vectors = []
     for i in range(0, len(texts), 100):
         batch = texts[i:i + 100]
@@ -58,19 +60,19 @@ def embed_texts(texts):
 
 
 # ---------------------------------------------------------------
-# ۳) ایندکس Pinecone (اگر وجود نداشت، می‌سازیم)
+# 3) Pinecone index (created on first run if missing)
 # ---------------------------------------------------------------
 def get_index():
     if not pc.has_index(INDEX_NAME):
-        # بُعد وکتور را با امبد کردن یک متن آزمایشی پیدا می‌کنیم
+        # Discover the vector dimension by embedding a probe text
         dim = len(embed_texts(["hello"])[0])
         pc.create_index(
             name=INDEX_NAME,
             dimension=dim,
-            metric="cosine",  # شباهت کسینوسی: معیار رایج برای امبدینگ‌ها
+            metric="cosine",  # cosine similarity: the standard choice for embeddings
             spec=ServerlessSpec(cloud="aws", region="us-east-1"),
         )
-        # صبر می‌کنیم تا ایندکس آماده شود
+        # Wait until the index is ready to accept vectors
         while not pc.describe_index(INDEX_NAME).status["ready"]:
             time.sleep(1)
     return pc.Index(INDEX_NAME)
@@ -80,11 +82,11 @@ index = get_index()
 
 
 # ---------------------------------------------------------------
-# ۴) استراتژی‌های تکه‌تکه کردن (Chunking)
+# 4) Chunking strategies
 # ---------------------------------------------------------------
 def chunk_fixed(text, size, overlap):
-    """روش ۱: تکه‌های با طول ثابت + همپوشانی.
-    همپوشانی باعث می‌شود جمله‌ای که وسط دو تکه افتاده، از دست نرود."""
+    """Strategy 1: fixed-length chunks with overlap.
+    The overlap keeps a sentence that falls on a chunk border from being lost."""
     chunks = []
     step = max(1, size - overlap)
     for start in range(0, len(text), step):
@@ -97,9 +99,9 @@ def chunk_fixed(text, size, overlap):
 
 
 def chunk_sentence(text, max_chars):
-    """روش ۲: جمله‌ها را جدا می‌کنیم و تا سقف max_chars کنار هم می‌گذاریم.
-    مزیت: هیچ جمله‌ای از وسط نصف نمی‌شود."""
-    sentences = re.split(r'(?<=[.!?؟])\s+', text)
+    """Strategy 2: split into sentences, then pack them up to max_chars.
+    Benefit: no sentence is ever cut in half."""
+    sentences = re.split(r'(?<=[.!?؟])\s+', text)  # ؟ = Arabic/Persian question mark
     chunks, current = [], ""
     for s in sentences:
         if not current or len(current) + len(s) + 1 <= max_chars:
@@ -113,8 +115,8 @@ def chunk_sentence(text, max_chars):
 
 
 def chunk_paragraph(text, max_chars):
-    """روش ۳: بر اساس پاراگراف (خط خالی). پاراگراف‌های کوتاه را
-    تا سقف max_chars به هم می‌چسبانیم تا تکه‌ها خیلی ریز نشوند."""
+    """Strategy 3: split on blank lines. Short paragraphs are merged
+    up to max_chars so the chunks do not end up too small."""
     paragraphs = [p.strip() for p in re.split(r'\n\s*\n', text) if p.strip()]
     chunks, current = [], ""
     for p in paragraphs:
@@ -129,7 +131,7 @@ def chunk_paragraph(text, max_chars):
 
 
 def split_text(text, strategy, size, overlap):
-    """بر اساس انتخاب کاربر، یکی از سه روش بالا را اجرا می‌کند."""
+    """Run whichever strategy the user picked in the UI."""
     if strategy == "sentence":
         chunks = chunk_sentence(text, size)
     elif strategy == "paragraph":
@@ -137,7 +139,7 @@ def split_text(text, strategy, size, overlap):
     else:
         chunks = chunk_fixed(text, size, overlap)
 
-    # ایمنی: اگر تکه‌ای خیلی بزرگ شد (مثلاً PDF بدون خط خالی)، خردش می‌کنیم
+    # Safety net: break up oversized chunks (e.g. a PDF with no blank lines)
     safe = []
     for c in chunks:
         if len(c) > size * 2:
@@ -148,7 +150,7 @@ def split_text(text, strategy, size, overlap):
 
 
 # ---------------------------------------------------------------
-# ۵) مسیرهای وب
+# 5) Web routes
 # ---------------------------------------------------------------
 @app.route("/")
 def home():
@@ -157,7 +159,7 @@ def home():
 
 @app.route("/upload", methods=["POST"])
 def upload():
-    """PDF → متن → تکه‌ها → وکتور → Pinecone"""
+    """PDF -> text -> chunks -> vectors -> Pinecone"""
     t0 = time.time()
 
     file = request.files["file"]
@@ -165,23 +167,23 @@ def upload():
     size = int(request.form.get("chunk_size", 800))
     overlap = int(request.form.get("overlap", 150))
 
-    # --- استخراج متن از PDF ---
+    # --- Extract text from the PDF ---
     reader = PdfReader(file)
     text = "\n".join((page.extract_text() or "") for page in reader.pages)
     if not text.strip():
         return jsonify({"error": "No text found in this PDF (maybe it is a scanned image)."}), 400
 
-    # --- تکه‌تکه کردن ---
+    # --- Split into chunks ---
     chunks = split_text(text, strategy, size, overlap)
 
-    # --- امبدینگ ---
+    # --- Embed ---
     t1 = time.time()
     vectors = embed_texts(chunks)
     embed_ms = int((time.time() - t1) * 1000)
 
-    # --- ذخیره در Pinecone ---
-    # شناسه‌ی هر تکه از نام فایل + روش + شماره ساخته می‌شود؛
-    # پس آپلود دوباره‌ی همان فایل، وکتورها را جایگزین می‌کند (نه تکراری).
+    # --- Store in Pinecone ---
+    # Each vector ID is derived from filename + strategy + chunk number, so
+    # re-uploading the same file replaces its vectors instead of duplicating them.
     t2 = time.time()
     items = []
     for i, (chunk, vec) in enumerate(zip(chunks, vectors)):
@@ -192,7 +194,7 @@ def upload():
             "metadata": {"filename": file.filename, "text": chunk,
                          "chunk_index": i, "strategy": strategy},
         })
-    for i in range(0, len(items), 100):  # آپسرت دسته‌ای
+    for i in range(0, len(items), 100):  # batched upsert
         index.upsert(vectors=items[i:i + 100])
     upsert_ms = int((time.time() - t2) * 1000)
 
@@ -213,16 +215,16 @@ def upload():
 
 @app.route("/ask", methods=["POST"])
 def ask():
-    """سؤال → وکتور → ۳ تکه نزدیک → LLM → پاسخ + منابع"""
+    """question -> vector -> top 3 chunks -> LLM -> answer + sources"""
     t0 = time.time()
     question = request.json["question"]
 
-    # --- ۱) سؤال را به وکتور تبدیل می‌کنیم ---
+    # --- 1) Turn the question into a vector ---
     t1 = time.time()
     q_vector = embed_texts([question])[0]
     embed_ms = int((time.time() - t1) * 1000)
 
-    # --- ۲) نزدیک‌ترین تکه‌ها را از Pinecone می‌گیریم ---
+    # --- 2) Fetch the nearest chunks from Pinecone ---
     t2 = time.time()
     result = index.query(vector=q_vector, top_k=TOP_K, include_metadata=True)
     search_ms = int((time.time() - t2) * 1000)
@@ -231,7 +233,7 @@ def ask():
     if not matches:
         return jsonify({"error": "The index is empty. Upload a PDF first."}), 400
 
-    # --- ۳) تکه‌ها را به عنوان «منبع» در پرامپت می‌گذاریم ---
+    # --- 3) Put those chunks into the prompt as "sources" ---
     context = ""
     for n, m in enumerate(matches, 1):
         context += f"[Source {n} | file: {m['metadata']['filename']}]\n{m['metadata']['text']}\n\n"
@@ -244,7 +246,7 @@ def ask():
         "SOURCES:\n" + context
     )
 
-    # --- ۴) پاسخ نهایی از LLM ---
+    # --- 4) Final answer from the LLM ---
     t3 = time.time()
     chat = client.chat.completions.create(
         model=CHAT_MODEL,
@@ -256,11 +258,11 @@ def ask():
     llm_ms = int((time.time() - t3) * 1000)
     answer = chat.choices[0].message.content
 
-    # --- ۵) پاسخ + منابع + شاخص‌ها را برمی‌گردانیم ---
+    # --- 5) Return the answer, the sources and the timing metrics ---
     sources = [{
         "filename": m["metadata"]["filename"],
         "text": m["metadata"]["text"],
-        "score": round(m["score"], 4),  # شباهت کسینوسی (۰ تا ۱)
+        "score": round(m["score"], 4),  # cosine similarity (0 to 1)
         "chunk_index": int(m["metadata"]["chunk_index"]),
     } for m in matches]
 
@@ -279,7 +281,7 @@ def ask():
 
 @app.route("/stats")
 def stats():
-    """آمار ایندکس برای داشبورد"""
+    """Index stats for the dashboard"""
     s = index.describe_index_stats()
     return jsonify({
         "total_vectors": s["total_vector_count"],
@@ -292,28 +294,28 @@ def stats():
 
 @app.route("/lab", methods=["POST"])
 def lab():
-    """آزمایشگاه آموزشی: دو متن را واقعاً امبد می‌کنیم و روی وکتورهایشان
-    طول (نرم L2) و هر سه متریک شباهت را حساب می‌کنیم."""
+    """Educational lab: really embed two texts, then compute their
+    lengths (L2 norm) and all three similarity metrics."""
     data = request.json
     va, vb = embed_texts([data["text_a"], data["text_b"]])
 
-    # ضرب داخلی: جمعِ حاصل‌ضرب مؤلفه‌های متناظر
+    # Dot product: sum of the products of matching components
     dot = sum(x * y for x, y in zip(va, vb))
-    # طول (نرم L2) هر وکتور: ریشه‌ی جمع مربع مؤلفه‌ها
+    # Length (L2 norm) of each vector: square root of the sum of squares
     norm_a = math.sqrt(sum(x * x for x in va))
     norm_b = math.sqrt(sum(x * x for x in vb))
-    # کسینوس: ضرب داخلی تقسیم بر حاصل‌ضرب طول‌ها → فقط زاویه می‌ماند
+    # Cosine: dot product divided by the product of the lengths -> only the angle is left
     cosine = dot / (norm_a * norm_b)
-    # اقلیدسی: فاصله‌ی خط مستقیم بین دو نقطه در فضای n بعدی
+    # Euclidean: straight-line distance between two points in n-dimensional space
     euclidean = math.sqrt(sum((x - y) ** 2 for x, y in zip(va, vb)))
 
     return jsonify({
         "dimension": len(va),
         "norm_a": round(norm_a, 6),
         "norm_b": round(norm_b, 6),
-        # اگر طول هر دو ≈ ۱ باشد یعنی مدل از قبل نرمال کرده است
+        # Both lengths close to 1 means the model already normalizes its output
         "is_normalized": abs(norm_a - 1) < 0.01 and abs(norm_b - 1) < 0.01,
-        "sample_a": [round(x, 4) for x in va[:6]],  # چند مؤلفه اول، فقط برای نمایش
+        "sample_a": [round(x, 4) for x in va[:6]],  # first few components, for display only
         "cosine": round(cosine, 4),
         "dot": round(dot, 4),
         "euclidean": round(euclidean, 4),
@@ -322,7 +324,7 @@ def lab():
 
 @app.route("/reset", methods=["POST"])
 def reset():
-    """پاک کردن همه وکتورها — برای شروع دوباره و مقایسه استراتژی‌ها"""
+    """Delete every vector — useful for starting over and comparing strategies"""
     index.delete(delete_all=True)
     return jsonify({"ok": True})
 
